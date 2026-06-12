@@ -40,7 +40,7 @@ const HOLDINGS = {
   MON: { amount: 9.30, buyPrice: 0.0215, chain: 'monad' },
   wNEAR: { amount: 0.1, buyPrice: 2.05, chain: 'near' },
   VVV: { amount: 0.4231, buyPrice: 14.63, chain: 'base' },
-  INX: { amount: 262.6, buyPrice: 0.00762, chain: 'eth' },
+  INX: { amount: 519.1, buyPrice: 0.00766, chain: 'eth' },
 };
 
 async function main() {

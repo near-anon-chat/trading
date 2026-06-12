@@ -38,12 +38,13 @@
 | 5 | 2026-06-12 | wNEAR → VVV (Base) | 2 wNEAR ($4.18) | 0.2871 VVV ($4.19) | ~30s | ✅ |
 | 6 | 2026-06-12 | wNEAR → INX (Ethereum) | 0.952 wNEAR ($2.00) | 262.6 INX ($2.00) | ~5s | ✅ |
 | 7 | 2026-06-12 | wNEAR → VVV (Base) | 0.952 wNEAR ($2.00) | 0.136 VVV ($2.00) | ~10s | ✅ |
+| 8 | 2026-06-12 | wNEAR → INX (Ethereum) | 0.952 wNEAR ($2.00) | 256.5 INX ($1.98) | ~5s | ✅ |
 
 ### Notes
-- Trades 2-7 used `recipientType: "INTENTS"` — tokens held in intents system
+- Trades 2-8 used `recipientType: "INTENTS"` — tokens held in intents system
 - SPX, MON, VVV, INX held via intents; AURORA is native NEP-141
 - Trade 5 used direct curl call (MCP tool had transient issue) — same 1Click API
-- Remaining: ~0.2 wNEAR in wallet
+- Remaining: ~0.25 wNEAR in wallet
 
 ## Token IDs
 - wNEAR: `nep141:wrap.near` (24 decimals)
@@ -73,7 +74,7 @@ GLDon, IAUon, SLVon, AGGon, TLTon, USDon
 - `HOLDINGS` config:
   - VVV: 0.4231 @ $14.63 (base)
   - AURORA: 76.4547 @ $0.0269 (near)
-  - INX: 262.6 @ $0.00762 (eth)
+  - INX: 519.1 @ $0.00766 (eth)
   - SPX: 3.21 @ $0.3178 (sol)
   - wNEAR: 0.1 @ $2.05 (near)
   - MON: 9.30 @ $0.0215 (monad)
