@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "near-intents": {
+      "type": "local",
+      "command": ["npx", "-y", "@iqai/mcp-near-intent-swaps"],
+      "enabled": true,
+      "environment": {
+        "NEAR_SWAP_JWT_TOKEN": "{env:NEAR_SWAP_JWT_TOKEN}"
+      }
+    }
+  }
+}
