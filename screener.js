@@ -54,12 +54,12 @@ async function main() {
   console.log('=== MARKET SENTIMENT ===');
   console.log('Fear & Greed: ' + fg + '/100 (' + fgc + ')\n');
 
-  const tokens = require('/home/jbx/code/trading/tokens.json');
+  const tokens = require('./tokens.json');
   if (!tokens || !tokens.length) { console.error('Run: fetch fresh tokens from 1Click API'); return; }
 
   let coinList = [];
   try {
-    const cached = require('fs').existsSync('/home/jbx/code/trading/coinList.json') ? require('/home/jbx/code/trading/coinList.json') : null;
+    const cached = require('fs').existsSync('./coinList.json') ? require('./coinList.json') : null;
     if (cached && cached.length) { coinList = cached; } else {
       coinList = await cg('/api/v3/coins/list');
       require('fs').writeFileSync('/home/jbx/code/trading/coinList.json', JSON.stringify(coinList));

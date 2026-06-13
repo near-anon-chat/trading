@@ -1,0 +1,850 @@
+[2026-06-13T10:06:55.783Z] === AGENT RUN ===
+[2026-06-13T10:06:55.788Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:06:56.834Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:07:15.182Z] Top 5:
+[2026-06-13T10:07:15.183Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:07:15.184Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:07:15.184Z]   AAVE: sc=4 $66.5700 2.5% RSI=75
+[2026-06-13T10:07:15.184Z]   APT: sc=3 $0.6682 1.3% RSI=68
+[2026-06-13T10:07:15.184Z]   USDon: sc=3 $99.8070 1.5% RSI=59
+[2026-06-13T10:07:19.673Z] NEAR: 1.467
+[2026-06-13T10:07:19.674Z] Decision: HOLD — No positions, waiting for opp (sc≥4 RSI<70)
+[2026-06-13T10:07:19.674Z] === DONE ===
+[2026-06-13T10:07:44.723Z] === AGENT RUN ===
+[2026-06-13T10:07:44.734Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:07:45.386Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:08:03.003Z] Top 5:
+[2026-06-13T10:08:03.004Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:08:03.004Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:08:03.004Z]   AAVE: sc=4 $66.5700 2.5% RS--
+[2026-06-13T10:08:03.004Z]   APT: sc=3 $0.6682 1.3% RS--
+[2026-06-13T10:08:03.004Z]   USDon: sc=3 $99.8070 1.5% RSI=59
+[2026-06-13T10:08:07.964Z] NEAR: 1.467
+[2026-06-13T10:08:07.964Z] Decision: HOLD — No positions, waiting for opp (sc≥4 RSI<70)
+[2026-06-13T10:08:07.964Z] === DONE ===
+[2026-06-13T10:08:43.759Z] === AGENT RUN ===
+[2026-06-13T10:08:43.764Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:08:44.476Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:10:06.642Z] Top 5:
+[2026-06-13T10:10:06.643Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:10:06.643Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:10:06.644Z]   USDon: sc=3 $99.8070 1.5% RSI=59
+[2026-06-13T10:10:06.644Z]   TLTon: sc=2 $85.7700 -0.8% RSI=61
+[2026-06-13T10:10:06.644Z]   AGGon: sc=2 $98.7600 -0.6% RSI=56
+[2026-06-13T10:10:11.122Z] NEAR: 1.467
+[2026-06-13T10:10:11.122Z]   KAITO: 25.474426
+[2026-06-13T10:10:11.122Z]   VVV: 0.148737
+[2026-06-13T10:10:11.122Z]   APT: 1.496076
+[2026-06-13T10:10:11.122Z]   AAVE: 0.030373
+[2026-06-13T10:10:11.123Z] Decision: HOLD — No positions, waiting for opp (sc≥4 RSI<70)
+[2026-06-13T10:10:11.123Z] === DONE ===
+[2026-06-13T10:10:54.027Z] === AGENT RUN ===
+[2026-06-13T10:10:54.032Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:10:54.707Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:10:55.114Z] CG prices: aave,aptos,kaito,venice-token,wrapped-near
+[2026-06-13T10:11:12.878Z] Top 5:
+[2026-06-13T10:11:12.878Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:11:12.878Z]   VVV: sc=7 $16.7300 11.7% RSI=79
+[2026-06-13T10:11:12.878Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:11:12.879Z]   AAVE: sc=4 $66.5900 2.5% RS--
+[2026-06-13T10:11:12.879Z]   APT: sc=3 $0.6680 1.3% RSI=68
+[2026-06-13T10:11:17.423Z] NEAR: 1.467
+[2026-06-13T10:11:17.423Z]   KAITO: 25.474426
+[2026-06-13T10:11:17.423Z]   VVV: 0.148737
+[2026-06-13T10:11:17.423Z]   APT: 1.496076
+[2026-06-13T10:11:17.423Z]   AAVE: 0.030373
+[2026-06-13T10:11:17.423Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:11:17.424Z] Would SELL_ALL but monitor-only (add JWT to .env)
+[2026-06-13T10:11:17.424Z] === DONE ===
+[2026-06-13T10:12:26.226Z] === AGENT RUN ===
+[2026-06-13T10:12:26.231Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:12:27.959Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:12:28.363Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:12:46.474Z] Top 5:
+[2026-06-13T10:12:46.475Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:12:46.475Z]   VVV: sc=7 $16.7100 11.6% RSI=79
+[2026-06-13T10:12:46.475Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:12:46.475Z]   AAVE: sc=4 $66.5700 2.4% RSI=75
+[2026-06-13T10:12:46.475Z]   APT: sc=3 $0.6676 1.1% RSI=68
+[2026-06-13T10:12:51.195Z] NEAR: 1.467
+[2026-06-13T10:12:51.196Z]   KAITO: 25.474426
+[2026-06-13T10:12:51.196Z]   VVV: 0.148737
+[2026-06-13T10:12:51.196Z]   APT: 1.496076
+[2026-06-13T10:12:51.196Z]   AAVE: 0.030373
+[2026-06-13T10:12:51.196Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:12:51.196Z] Would SELL_ALL but monitor-only (add JWT to .env)
+[2026-06-13T10:12:51.196Z] === DONE ===
+[2026-06-13T10:15:01.931Z] === AGENT RUN ===
+[2026-06-13T10:15:01.937Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:15:03.610Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:15:03.998Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:17:51.010Z] Top 5:
+[2026-06-13T10:17:51.011Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:17:51.011Z]   VVV: sc=7 $16.8500 12.5% RSI=79
+[2026-06-13T10:17:51.012Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:17:51.012Z]   AAVE: sc=4 $66.5500 2.4% RS--
+[2026-06-13T10:17:51.013Z]   APT: sc=3 $0.6673 1.0% RSI=68
+[2026-06-13T10:17:51.020Z] Bal fetch err: getaddrinfo EAI_AGAIN rpc.mainnet.near.org
+[2026-06-13T10:17:51.024Z] NEAR: 0.000
+[2026-06-13T10:17:51.025Z] Decision: HOLD — Low gas (0.00 NEAR)
+[2026-06-13T10:17:51.025Z] === DONE ===
+[2026-06-13T10:20:01.361Z] === AGENT RUN ===
+[2026-06-13T10:20:01.367Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:20:01.999Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:20:02.509Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:20:21.926Z] Top 5:
+[2026-06-13T10:20:21.927Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:20:21.927Z]   VVV: sc=7 $16.9900 14.1% RSI=79
+[2026-06-13T10:20:21.928Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:20:21.928Z]   AAVE: sc=4 $66.7500 2.7% RSI=75
+[2026-06-13T10:20:21.928Z]   APT: sc=3 $0.6672 0.4% RSI=68
+[2026-06-13T10:20:26.791Z] NEAR: 1.467
+[2026-06-13T10:20:26.792Z]   KAITO: 25.474426
+[2026-06-13T10:20:26.792Z]   VVV: 0.148737
+[2026-06-13T10:20:26.792Z]   APT: 1.496076
+[2026-06-13T10:20:26.792Z]   AAVE: 0.030373
+[2026-06-13T10:20:26.793Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:20:26.793Z] Would SELL_ALL but monitor-only (add JWT to .env)
+[2026-06-13T10:20:26.793Z] === DONE ===
+[2026-06-13T10:25:02.119Z] === AGENT RUN ===
+[2026-06-13T10:25:02.125Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:25:02.888Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:25:03.300Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:25:22.712Z] Top 5:
+[2026-06-13T10:25:22.712Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:25:22.713Z]   VVV: sc=7 $17.1200 15.0% RSI=79
+[2026-06-13T10:25:22.713Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:25:22.713Z]   AAVE: sc=4 $66.7800 2.9% RSI=75
+[2026-06-13T10:25:22.713Z]   APT: sc=3 $0.6671 0.6% RSI=68
+[2026-06-13T10:25:27.556Z] NEAR: 1.467
+[2026-06-13T10:25:27.556Z]   KAITO: 25.474426
+[2026-06-13T10:25:27.557Z]   VVV: 0.148737
+[2026-06-13T10:25:27.557Z]   APT: 1.496076
+[2026-06-13T10:25:27.557Z]   AAVE: 0.030373
+[2026-06-13T10:25:27.558Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:25:27.558Z] Would SELL_ALL but monitor-only (add JWT to .env)
+[2026-06-13T10:25:27.558Z] === DONE ===
+[2026-06-13T10:30:01.860Z] === AGENT RUN ===
+[2026-06-13T10:30:01.865Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:30:02.601Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:30:02.968Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:30:21.392Z] Top 5:
+[2026-06-13T10:30:21.392Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:30:21.393Z]   VVV: sc=7 $17.0400 15.0% RSI=79
+[2026-06-13T10:30:21.393Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:30:21.393Z]   AAVE: sc=4 $66.8500 3.4% RSI=75
+[2026-06-13T10:30:21.394Z]   KAITO: sc=3 $0.4246 2.0% RSI=45
+[2026-06-13T10:30:26.158Z] NEAR: 1.467
+[2026-06-13T10:30:26.159Z]   KAITO: 25.474426
+[2026-06-13T10:30:26.159Z]   VVV: 0.148737
+[2026-06-13T10:30:26.159Z]   APT: 1.496076
+[2026-06-13T10:30:26.159Z]   AAVE: 0.030373
+[2026-06-13T10:30:26.160Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:30:26.160Z] Would SELL_ALL but monitor-only (add JWT to .env)
+[2026-06-13T10:30:26.160Z] === DONE ===
+[2026-06-13T10:35:01.462Z] === AGENT RUN ===
+[2026-06-13T10:35:01.467Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:35:02.163Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:35:02.568Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:35:20.570Z] Top 5:
+[2026-06-13T10:35:20.570Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:35:20.571Z]   VVV: sc=7 $16.9800 15.7% RSI=79
+[2026-06-13T10:35:20.571Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:35:20.571Z]   AAVE: sc=4 $66.9100 3.5% RSI=75
+[2026-06-13T10:35:20.572Z]   APT: sc=3 $0.6665 1.0% RSI=68
+[2026-06-13T10:35:25.200Z] NEAR: 1.467
+[2026-06-13T10:35:25.200Z]   KAITO: 25.474426
+[2026-06-13T10:35:25.200Z]   VVV: 0.148737
+[2026-06-13T10:35:25.200Z]   APT: 1.496076
+[2026-06-13T10:35:25.200Z]   AAVE: 0.030373
+[2026-06-13T10:35:25.201Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:35:25.201Z] Would SELL_ALL but monitor-only (add JWT to .env)
+[2026-06-13T10:35:25.201Z] === DONE ===
+[2026-06-13T10:40:01.541Z] === AGENT RUN ===
+[2026-06-13T10:40:01.546Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:40:02.297Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:40:02.704Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:40:20.931Z] Top 5:
+[2026-06-13T10:40:20.931Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:40:20.932Z]   VVV: sc=7 $16.9000 15.1% RSI=79
+[2026-06-13T10:40:20.932Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:40:20.932Z]   AAVE: sc=4 $66.9800 3.5% RSI=75
+[2026-06-13T10:40:20.932Z]   APT: sc=3 $0.6663 0.4% RSI=68
+[2026-06-13T10:40:25.847Z] NEAR: 1.467
+[2026-06-13T10:40:25.848Z]   KAITO: 25.474426
+[2026-06-13T10:40:25.848Z]   VVV: 0.148737
+[2026-06-13T10:40:25.848Z]   APT: 1.496076
+[2026-06-13T10:40:25.848Z]   AAVE: 0.030373
+[2026-06-13T10:40:25.848Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:40:25.849Z] Would SELL_ALL but monitor-only (add JWT to .env)
+[2026-06-13T10:40:25.849Z] === DONE ===
+[2026-06-13T10:45:02.168Z] === AGENT RUN ===
+[2026-06-13T10:45:02.174Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:45:02.803Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:45:03.253Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:45:22.527Z] Top 5:
+[2026-06-13T10:45:22.528Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:45:22.528Z]   VVV: sc=7 $16.9000 15.0% RSI=79
+[2026-06-13T10:45:22.529Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:45:22.529Z]   AAVE: sc=4 $67.0500 3.8% RSI=75
+[2026-06-13T10:45:22.529Z]   APT: sc=3 $0.6650 0.4% RSI=68
+[2026-06-13T10:45:27.116Z] NEAR: 1.467
+[2026-06-13T10:45:27.116Z]   KAITO: 25.474426
+[2026-06-13T10:45:27.117Z]   VVV: 0.148737
+[2026-06-13T10:45:27.117Z]   APT: 1.496076
+[2026-06-13T10:45:27.117Z]   AAVE: 0.030373
+[2026-06-13T10:45:27.117Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:45:27.118Z] Would SELL_ALL but monitor-only (add JWT to .env)
+[2026-06-13T10:45:27.118Z] === DONE ===
+[2026-06-13T10:50:01.432Z] === AGENT RUN ===
+[2026-06-13T10:50:01.437Z] Monitor-only mode: add JWT to .env to enable swaps
+[2026-06-13T10:50:02.172Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:50:02.527Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:50:21.724Z] Top 5:
+[2026-06-13T10:50:21.725Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:50:21.725Z]   VVV: sc=7 $16.9800 15.8% RSI=79
+[2026-06-13T10:50:21.726Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:50:21.726Z]   AAVE: sc=4 $67.1000 3.7% RSI=75
+[2026-06-13T10:50:21.726Z]   KAITO: sc=3 $0.4252 2.3% RSI=45
+[2026-06-13T10:50:26.538Z] NEAR: 1.467
+[2026-06-13T10:50:26.539Z]   KAITO: 25.474426
+[2026-06-13T10:50:26.539Z]   VVV: 0.148737
+[2026-06-13T10:50:26.539Z]   APT: 1.496076
+[2026-06-13T10:50:26.539Z]   AAVE: 0.030373
+[2026-06-13T10:50:26.540Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:50:26.540Z] Would SELL_ALL but monitor-only (add JWT to .env)
+[2026-06-13T10:50:26.540Z] === DONE ===
+[2026-06-13T10:53:12.401Z] === AGENT RUN ===
+[2026-06-13T10:53:12.406Z] Full mode: swap execution enabled
+[2026-06-13T10:53:13.108Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:53:13.465Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:53:30.719Z] Top 5:
+[2026-06-13T10:53:30.720Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:53:30.720Z]   VVV: sc=7 $17.1000 16.2% RSI=79
+[2026-06-13T10:53:30.720Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:53:30.720Z]   AAVE: sc=4 $67.1100 3.7% RSI=75
+[2026-06-13T10:53:30.721Z]   KAITO: sc=3 $0.4251 2.2% RSI=45
+[2026-06-13T10:53:35.231Z] NEAR: 1.467
+[2026-06-13T10:53:35.231Z]   KAITO: 25.474426
+[2026-06-13T10:53:35.231Z]   VVV: 0.148737
+[2026-06-13T10:53:35.231Z]   APT: 1.496076
+[2026-06-13T10:53:35.231Z]   AAVE: 0.030373
+[2026-06-13T10:53:35.232Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:53:35.232Z] Executing...
+[2026-06-13T10:53:35.232Z] Sell KAITO→USDC...
+[2026-06-13T10:53:35.981Z]   Swap KAITO→USDC addr=3275bf683fb22cca...
+[2026-06-13T10:53:37.092Z] Swap err: Command failed: node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); process.argv=['node','sign',...d.args]; require('/home/jbz/code/trading/nep413_sign.js')"
+node:fs:442
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENXIO: no such device or address, open '/dev/stdin'
+    at Object.readFileSync (node:fs:442:20)
+    at [eval]:1:34
+    at runScriptInThisContext (node:internal/vm:209:10)
+    at node:internal/process/execution:449:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:447:60)
+    at evalFunction (node:internal/process/execution:87:30)
+    at evalScript (node:internal/process/execution:99:3)
+    at node:internal/main/eval_string:74:3 {
+  errno: -6,
+  code: 'ENXIO',
+  syscall: 'open',
+  path: '/dev/stdin'
+}
+
+Node.js v22.15.0
+
+[2026-06-13T10:53:37.092Z] Sell VVV→USDC...
+[2026-06-13T10:53:37.639Z]   Swap VVV→USDC addr=de037f933ea4e2a3...
+[2026-06-13T10:53:37.801Z] Swap err: Command failed: node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); process.argv=['node','sign',...d.args]; require('/home/jbz/code/trading/nep413_sign.js')"
+node:fs:442
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENXIO: no such device or address, open '/dev/stdin'
+    at Object.readFileSync (node:fs:442:20)
+    at [eval]:1:34
+    at runScriptInThisContext (node:internal/vm:209:10)
+    at node:internal/process/execution:449:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:447:60)
+    at evalFunction (node:internal/process/execution:87:30)
+    at evalScript (node:internal/process/execution:99:3)
+    at node:internal/main/eval_string:74:3 {
+  errno: -6,
+  code: 'ENXIO',
+  syscall: 'open',
+  path: '/dev/stdin'
+}
+
+Node.js v22.15.0
+
+[2026-06-13T10:53:37.801Z] Sell APT→USDC...
+[2026-06-13T10:53:38.310Z]   Swap APT→USDC addr=971ad56da5624381...
+[2026-06-13T10:53:38.470Z] Swap err: Command failed: node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); process.argv=['node','sign',...d.args]; require('/home/jbz/code/trading/nep413_sign.js')"
+node:fs:442
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENXIO: no such device or address, open '/dev/stdin'
+    at Object.readFileSync (node:fs:442:20)
+    at [eval]:1:34
+    at runScriptInThisContext (node:internal/vm:209:10)
+    at node:internal/process/execution:449:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:447:60)
+    at evalFunction (node:internal/process/execution:87:30)
+    at evalScript (node:internal/process/execution:99:3)
+    at node:internal/main/eval_string:74:3 {
+  errno: -6,
+  code: 'ENXIO',
+  syscall: 'open',
+  path: '/dev/stdin'
+}
+
+Node.js v22.15.0
+
+[2026-06-13T10:53:38.470Z] Sell AAVE→USDC...
+[2026-06-13T10:53:39.055Z]   Swap AAVE→USDC addr=cda1084941771ffd...
+[2026-06-13T10:53:39.218Z] Swap err: Command failed: node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); process.argv=['node','sign',...d.args]; require('/home/jbz/code/trading/nep413_sign.js')"
+node:fs:442
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENXIO: no such device or address, open '/dev/stdin'
+    at Object.readFileSync (node:fs:442:20)
+    at [eval]:1:34
+    at runScriptInThisContext (node:internal/vm:209:10)
+    at node:internal/process/execution:449:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:447:60)
+    at evalFunction (node:internal/process/execution:87:30)
+    at evalScript (node:internal/process/execution:99:3)
+    at node:internal/main/eval_string:74:3 {
+  errno: -6,
+  code: 'ENXIO',
+  syscall: 'open',
+  path: '/dev/stdin'
+}
+
+Node.js v22.15.0
+
+[2026-06-13T10:53:39.218Z] === DONE ===
+[2026-06-13T10:54:03.558Z] === AGENT RUN ===
+[2026-06-13T10:54:03.563Z] Full mode: swap execution enabled
+[2026-06-13T10:54:04.355Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:54:04.532Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:54:21.867Z] Top 5:
+[2026-06-13T10:54:21.867Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:54:21.868Z]   VVV: sc=7 $17.1000 16.2% RS--
+[2026-06-13T10:54:21.868Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:54:21.868Z]   AAVE: sc=4 $67.1100 3.7% RS--
+[2026-06-13T10:54:21.868Z]   KAITO: sc=3 $0.4251 2.2% RS--
+[2026-06-13T10:54:26.219Z] NEAR: 1.467
+[2026-06-13T10:54:26.219Z]   KAITO: 25.474426
+[2026-06-13T10:54:26.220Z]   VVV: 0.148737
+[2026-06-13T10:54:26.220Z]   APT: 1.496076
+[2026-06-13T10:54:26.220Z]   AAVE: 0.030373
+[2026-06-13T10:54:26.220Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:54:26.220Z] Executing...
+[2026-06-13T10:54:26.220Z] Sell KAITO→USDC...
+[2026-06-13T10:54:26.763Z]   Swap KAITO→USDC addr=7fd43a5246877556...
+[2026-06-13T10:54:27.640Z]   Intent: Ccsjvde9rYqamS8z...
+[2026-06-13T10:54:38.025Z]   SETTLED
+[2026-06-13T10:54:45.425Z]   ✅ 10.825186 USDC
+[2026-06-13T10:54:45.425Z] === DONE ===
+[2026-06-13T10:54:59.855Z] === AGENT RUN ===
+[2026-06-13T10:54:59.862Z] Full mode: swap execution enabled
+[2026-06-13T10:54:59.863Z] Cooldown active
+[2026-06-13T10:55:00.456Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:55:00.596Z] CG price err: RATE_LIMITED
+[2026-06-13T10:55:01.970Z] === AGENT RUN ===
+[2026-06-13T10:55:01.977Z] Full mode: swap execution enabled
+[2026-06-13T10:55:01.978Z] Cooldown active
+[2026-06-13T10:55:02.599Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:55:02.777Z] CG price err: RATE_LIMITED
+[2026-06-13T10:56:18.235Z] Top 5:
+[2026-06-13T10:56:18.236Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:56:18.236Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:56:18.236Z]   USDon: sc=3 $99.8070 1.5% RSI=59
+[2026-06-13T10:56:18.236Z]   TLTon: sc=2 $85.7700 -0.8% RSI=61
+[2026-06-13T10:56:18.237Z]   AGGon: sc=2 $98.7600 -0.6% RSI=56
+[2026-06-13T10:56:20.882Z] Top 5:
+[2026-06-13T10:56:20.882Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:56:20.883Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:56:20.883Z]   USDon: sc=3 $99.8070 1.5% RSI=59
+[2026-06-13T10:56:20.884Z]   TLTon: sc=2 $85.7700 -0.8% RSI=61
+[2026-06-13T10:56:20.884Z]   AGGon: sc=2 $98.7600 -0.6% RSI=56
+[2026-06-13T10:56:22.759Z] NEAR: 1.467
+[2026-06-13T10:56:22.760Z]   VVV: 0.148737
+[2026-06-13T10:56:22.760Z]   APT: 1.496076
+[2026-06-13T10:56:22.760Z]   AAVE: 0.030373
+[2026-06-13T10:56:22.760Z]   USDC: 10.825186
+[2026-06-13T10:56:22.761Z] Decision: HOLD — QQQon not in portfolio tokens
+[2026-06-13T10:56:22.761Z] === DONE ===
+[2026-06-13T10:56:25.544Z] NEAR: 1.467
+[2026-06-13T10:56:25.544Z]   VVV: 0.148737
+[2026-06-13T10:56:25.544Z]   APT: 1.496076
+[2026-06-13T10:56:25.545Z]   AAVE: 0.030373
+[2026-06-13T10:56:25.545Z]   USDC: 10.825186
+[2026-06-13T10:56:25.546Z] Decision: HOLD — QQQon not in portfolio tokens
+[2026-06-13T10:56:25.546Z] === DONE ===
+[2026-06-13T10:56:50.338Z] === AGENT RUN ===
+[2026-06-13T10:56:50.343Z] Full mode: swap execution enabled
+[2026-06-13T10:56:51.041Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:56:51.162Z] CG price err: RATE_LIMITED
+[2026-06-13T10:57:08.319Z] Top 5:
+[2026-06-13T10:57:08.320Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:57:08.320Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:57:08.320Z]   USDon: sc=3 $99.8070 1.5% RSI=59
+[2026-06-13T10:57:08.320Z]   TLTon: sc=2 $85.7700 -0.8% RSI=61
+[2026-06-13T10:57:08.321Z]   AGGon: sc=2 $98.7600 -0.6% RSI=56
+[2026-06-13T10:57:12.738Z] NEAR: 1.467
+[2026-06-13T10:57:12.739Z]   VVV: 0.148737
+[2026-06-13T10:57:12.739Z]   APT: 1.496076
+[2026-06-13T10:57:12.739Z]   AAVE: 0.030373
+[2026-06-13T10:57:12.739Z]   USDC: 10.825186
+[2026-06-13T10:57:12.739Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 3/15 dn
+[2026-06-13T10:57:12.740Z] Executing...
+[2026-06-13T10:57:12.740Z] Sell VVV→USDC...
+[2026-06-13T10:57:13.360Z]   Swap VVV→USDC addr=9481b04dd0ecd14c...
+[2026-06-13T10:57:14.690Z]   Intent: N7A4pM6HM9DaQ95C...
+[2026-06-13T10:57:19.883Z]   SETTLED
+[2026-06-13T10:57:34.005Z]   ✅ 2.553674 USDC
+[2026-06-13T10:57:34.005Z] === DONE ===
+[2026-06-13T10:57:42.159Z] === AGENT RUN ===
+[2026-06-13T10:57:42.164Z] Full mode: swap execution enabled
+[2026-06-13T10:57:42.856Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:57:43.261Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T10:58:00.350Z] Top 5:
+[2026-06-13T10:58:00.351Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:58:00.351Z]   VVV: sc=7 $17.1300 16.2% RS--
+[2026-06-13T10:58:00.351Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:58:00.352Z]   AAVE: sc=4 $66.9100 3.5% RS--
+[2026-06-13T10:58:00.352Z]   KAITO: sc=3 $0.4252 2.3% RS--
+[2026-06-13T10:58:04.732Z] NEAR: 1.467
+[2026-06-13T10:58:04.732Z]   APT: 1.496076
+[2026-06-13T10:58:04.732Z]   AAVE: 0.030373
+[2026-06-13T10:58:04.732Z]   USDC: 13.378860
+[2026-06-13T10:58:04.732Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T10:58:04.732Z] Executing...
+[2026-06-13T10:58:04.732Z] Sell APT→USDC...
+[2026-06-13T10:58:05.480Z]   Swap APT→USDC addr=7589b35f0ee05661...
+[2026-06-13T10:58:06.605Z]   Intent: GiNvrunyLnu8nJcM...
+[2026-06-13T10:58:11.768Z]   SETTLED
+[2026-06-13T10:58:24.370Z]   ✅ 0.990833 USDC
+[2026-06-13T10:58:24.371Z] === DONE ===
+[2026-06-13T10:58:29.916Z] === AGENT RUN ===
+[2026-06-13T10:58:29.921Z] Full mode: swap execution enabled
+[2026-06-13T10:58:30.795Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:58:30.978Z] CG price err: RATE_LIMITED
+[2026-06-13T10:58:48.976Z] Top 5:
+[2026-06-13T10:58:48.977Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T10:58:48.977Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T10:58:48.977Z]   USDon: sc=3 $99.8070 1.5% RSI=59
+[2026-06-13T10:58:48.977Z]   TLTon: sc=2 $85.7700 -0.8% RSI=61
+[2026-06-13T10:58:48.978Z]   AGGon: sc=2 $98.7600 -0.6% RSI=56
+[2026-06-13T10:58:53.496Z] NEAR: 1.467
+[2026-06-13T10:58:53.497Z]   AAVE: 0.030373
+[2026-06-13T10:58:53.497Z]   USDC: 14.369693
+[2026-06-13T10:58:53.497Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 3/15 dn
+[2026-06-13T10:58:53.497Z] Executing...
+[2026-06-13T10:58:53.497Z] Sell AAVE→USDC...
+[2026-06-13T10:58:54.225Z]   Swap AAVE→USDC addr=50611d7df9538e6d...
+[2026-06-13T10:58:55.107Z]   Intent: BPwdi5MfnQc7hk7F...
+[2026-06-13T10:59:00.299Z]   SETTLED
+[2026-06-13T10:59:12.917Z]   ✅ 2.025067 USDC
+[2026-06-13T10:59:12.917Z] === DONE ===
+[2026-06-13T10:59:51.643Z] === AGENT RUN ===
+[2026-06-13T10:59:51.648Z] Full mode: swap execution enabled
+[2026-06-13T10:59:52.404Z] F&G: 13/100 Extreme Fear
+[2026-06-13T10:59:52.794Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:00:01.947Z] === AGENT RUN ===
+[2026-06-13T11:00:01.953Z] Full mode: swap execution enabled
+[2026-06-13T11:00:02.696Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:00:02.867Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:00:10.241Z] Top 5:
+[2026-06-13T11:00:10.241Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:00:10.242Z]   VVV: sc=7 $17.1600 16.5% RSI=79
+[2026-06-13T11:00:10.242Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:00:10.242Z]   AAVE: sc=4 $66.8100 3.4% RSI=75
+[2026-06-13T11:00:10.242Z]   KAITO: sc=3 $0.4253 2.4% RSI=45
+[2026-06-13T11:00:14.777Z] NEAR: 1.467
+[2026-06-13T11:00:14.778Z]   USDC: 16.394760
+[2026-06-13T11:00:14.778Z] Decision: HOLD — No positions, waiting for crypto opp (sc≥4 RSI<70)
+[2026-06-13T11:00:14.778Z] === DONE ===
+[2026-06-13T11:00:21.016Z] Top 5:
+[2026-06-13T11:00:21.017Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:00:21.018Z]   VVV: sc=7 $17.1600 16.5% RS--
+[2026-06-13T11:00:21.018Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:00:21.018Z]   AAVE: sc=4 $66.8100 3.4% RS--
+[2026-06-13T11:00:21.018Z]   KAITO: sc=3 $0.4253 2.4% RSI=45
+[2026-06-13T11:00:25.765Z] NEAR: 1.467
+[2026-06-13T11:00:25.766Z]   USDC: 16.394760
+[2026-06-13T11:00:25.766Z] Decision: BUY — Re-enter VVV (sc=7)
+[2026-06-13T11:00:25.766Z] Executing...
+[2026-06-13T11:00:25.767Z] Buy VVV from USDC...
+[2026-06-13T11:00:28.678Z]   Swap USDC→VVV addr=0162eeed74e42e3f...
+[2026-06-13T11:00:29.271Z] Swap err: Command failed: node /home/jbz/code/trading/nep413_sign.js sign {"deadline":"2026-06-17T11:00:25.000Z","intents":[{"intent":"transfer","receiver_id":"0162eeed74e42e3fbe2f36648f0060423105d4211e2891e92ff51a75fdce18fd","tokens":{"nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1":"15575022"}}],"signer_id":"0c279aaeb803608f60bf8eac25a52570e4a32551f5feb854f0f0355f028760ed"} Vij2xgAlKBKzAJqPokbZuRgP46o9pMAV5LVcAHcBTB8= intents.near ed25519:5hBA7ZEzD8cZV2otawo2SfnUnvyf4PvoEzp8wNMx9xkF5Gy1p1wS9NwDLHJD3MNCLewxKcdjfRLKUmuBAiuUQj7a
+/home/jbz/code/trading/nep413_sign.js:4
+const { serialize } = require('/home/jbz/.npm/_npx/04c7a6cdf0f66cbd/node_modules/borsh/lib/esm/index.js');
+                      ^
+
+Error [ERR_REQUIRE_ESM]: require() of ES Module /home/jbz/.npm/_npx/04c7a6cdf0f66cbd/node_modules/borsh/lib/esm/index.js from /home/jbz/code/trading/nep413_sign.js not supported.
+Instead change the require of index.js in /home/jbz/code/trading/nep413_sign.js to a dynamic import() which is available in all CommonJS modules.
+    at Object.<anonymous> (/home/jbz/code/trading/nep413_sign.js:4:23) {
+  code: 'ERR_REQUIRE_ESM'
+}
+
+Node.js v18.19.1
+
+[2026-06-13T11:00:29.271Z] === DONE ===
+[2026-06-13T11:04:47.818Z] === AGENT RUN ===
+[2026-06-13T11:04:47.825Z] Full mode: swap execution enabled
+[2026-06-13T11:04:48.528Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:04:48.941Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:05:01.418Z] === AGENT RUN ===
+[2026-06-13T11:05:01.425Z] Full mode: swap execution enabled
+[2026-06-13T11:05:02.045Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:05:02.172Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:05:07.760Z] Top 5:
+[2026-06-13T11:05:07.760Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:05:07.761Z]   VVV: sc=7 $17.2400 17.6% RSI=79
+[2026-06-13T11:05:07.761Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:05:07.761Z]   AAVE: sc=4 $66.6700 3.2% RSI=75
+[2026-06-13T11:05:07.761Z]   KAITO: sc=3 $0.4254 2.4% RSI=45
+[2026-06-13T11:05:12.162Z] NEAR: 1.467
+[2026-06-13T11:05:12.162Z]   USDC: 16.394760
+[2026-06-13T11:05:12.163Z] Decision: HOLD — No positions, waiting for crypto opp (sc≥4 RSI<70)
+[2026-06-13T11:05:12.163Z] === DONE ===
+[2026-06-13T11:05:19.861Z] Top 5:
+[2026-06-13T11:05:19.861Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:05:19.862Z]   VVV: sc=7 $17.2400 17.6% RS--
+[2026-06-13T11:05:19.862Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:05:19.862Z]   AAVE: sc=4 $66.6700 3.2% RS--
+[2026-06-13T11:05:19.863Z]   KAITO: sc=3 $0.4254 2.4% RS--
+[2026-06-13T11:05:24.223Z] NEAR: 1.467
+[2026-06-13T11:05:24.223Z]   USDC: 16.394760
+[2026-06-13T11:05:24.224Z] Decision: BUY — Re-enter VVV (sc=7)
+[2026-06-13T11:05:24.224Z] Executing...
+[2026-06-13T11:05:24.224Z] Buy VVV from USDC...
+[2026-06-13T11:05:25.192Z]   Swap USDC→VVV addr=b0e514c6bedf9457...
+[2026-06-13T11:05:31.503Z]   Intent: GxXX2KgZmyHkW5nB...
+[2026-06-13T11:05:36.703Z]   SETTLED
+[2026-06-13T11:05:49.368Z]   ✅ 0.901439415076039833 VVV
+[2026-06-13T11:05:49.369Z] === DONE ===
+[2026-06-13T11:07:15.025Z] === AGENT RUN ===
+[2026-06-13T11:07:15.030Z] Full mode: swap execution enabled
+[2026-06-13T11:07:15.030Z] Cooldown active
+[2026-06-13T11:07:15.682Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:07:16.090Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:07:33.230Z] Top 5:
+[2026-06-13T11:07:33.230Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:07:33.231Z]   VVV: sc=7 $17.2200 17.7% RSI=79
+[2026-06-13T11:07:33.231Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:07:33.231Z]   AAVE: sc=4 $66.6100 3.0% RSI=75
+[2026-06-13T11:07:33.231Z]   KAITO: sc=3 $0.4257 2.3% RSI=45
+[2026-06-13T11:07:37.755Z] NEAR: 1.467
+[2026-06-13T11:07:37.755Z]   VVV: 0.901439
+[2026-06-13T11:07:37.756Z]   USDC: 0.819738
+[2026-06-13T11:07:37.756Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T11:07:37.756Z] Would trade but cooldown
+[2026-06-13T11:07:37.757Z] ── Portfolio ──
+[2026-06-13T11:07:37.757Z]   VVV: 0.901439 × $17.2200 = $15.52
+[2026-06-13T11:07:37.757Z]   USDC: 0.82 × $0.0000 = $0.00
+[2026-06-13T11:07:37.757Z]   NEAR: 1.467 × $2.02 = $2.96
+[2026-06-13T11:07:37.757Z]   Total: $18.49 | Δprev: -0.87 (-4.51%) | Δstart: -0.87 (-4.51%)
+[2026-06-13T11:07:37.757Z] ── ─────── ──
+[2026-06-13T11:07:37.757Z] === DONE ===
+[2026-06-13T11:08:02.052Z] === AGENT RUN ===
+[2026-06-13T11:08:02.057Z] Full mode: swap execution enabled
+[2026-06-13T11:08:02.783Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:08:02.959Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:08:20.135Z] Top 5:
+[2026-06-13T11:08:20.136Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:08:20.136Z]   VVV: sc=7 $17.2200 17.7% RS--
+[2026-06-13T11:08:20.136Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:08:20.136Z]   AAVE: sc=4 $66.6100 3.0% RS--
+[2026-06-13T11:08:20.137Z]   KAITO: sc=3 $0.4257 2.3% RS--
+[2026-06-13T11:08:24.690Z] NEAR: 1.467
+[2026-06-13T11:08:24.691Z]   VVV: 0.901439
+[2026-06-13T11:08:24.691Z]   USDC: 0.819738
+[2026-06-13T11:08:24.691Z] Decision: SELL_ALL — Risk-off F&G=13 gold=dn 4/15 dn
+[2026-06-13T11:08:24.691Z] Executing...
+[2026-06-13T11:08:24.691Z] Sell VVV→USDC...
+[2026-06-13T11:08:25.460Z]   Swap VVV→USDC addr=3ab34e0d6324f3a2...
+[2026-06-13T11:08:26.746Z]   Intent: 8LpVoW3AR29w4Dy7...
+[2026-06-13T11:08:32.001Z]   SETTLED
+[2026-06-13T11:08:46.119Z]   ✅ 15.52323 USDC
+[2026-06-13T11:08:46.121Z] ── Portfolio ──
+[2026-06-13T11:08:46.121Z]   VVV: 0.901439 × $17.2200 = $15.52
+[2026-06-13T11:08:46.121Z]   USDC: 0.82 × $1.0000 = $0.82
+[2026-06-13T11:08:46.121Z]   NEAR: 1.467 × $2.02 = $2.96
+[2026-06-13T11:08:46.121Z]   Total: $19.31 | Δprev: -0.05 (-0.28%) | Δstart: -0.05 (-0.28%)
+[2026-06-13T11:08:46.122Z] ── ─────── ──
+[2026-06-13T11:08:46.122Z] === DONE ===
+[2026-06-13T11:10:01.497Z] === AGENT RUN ===
+[2026-06-13T11:10:01.500Z] Full mode: swap execution enabled
+[2026-06-13T11:10:02.183Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:10:02.593Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:10:19.691Z] Top 5:
+[2026-06-13T11:10:19.691Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:10:19.691Z]   VVV: sc=7 $17.2100 17.6% RSI=79
+[2026-06-13T11:10:19.692Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:10:19.692Z]   AAVE: sc=4 $66.5400 2.9% RS--
+[2026-06-13T11:10:19.692Z]   KAITO: sc=3 $0.4259 2.3% RSI=45
+[2026-06-13T11:10:24.286Z] NEAR: 1.467
+[2026-06-13T11:10:24.286Z]   USDC: 16.342968
+[2026-06-13T11:10:24.287Z] Decision: BUY — Re-enter AAVE (sc=4)
+[2026-06-13T11:10:24.287Z] Executing...
+[2026-06-13T11:10:24.287Z] Buy AAVE from USDC...
+[2026-06-13T11:10:25.020Z]   Swap USDC→AAVE addr=a2d65d1470f370e2...
+[2026-06-13T11:10:26.276Z]   Intent: 2QtkmYADUzY4TcN9...
+[2026-06-13T11:10:31.484Z]   SETTLED
+[2026-06-13T11:10:44.450Z]   ✅ 0.233180209650458259 AAVE
+[2026-06-13T11:10:44.451Z] ── Portfolio ──
+[2026-06-13T11:10:44.451Z]   USDC: 16.34 × $1.0000 = $16.34
+[2026-06-13T11:10:44.451Z]   NEAR: 1.467 × $2.02 = $2.96
+[2026-06-13T11:10:44.451Z]   Total: $19.31 | Δprev: +0.00 (+0.00%) | Δstart: -0.05 (-0.28%)
+[2026-06-13T11:10:44.451Z] ── ─────── ──
+[2026-06-13T11:10:44.452Z] === DONE ===
+[2026-06-13T11:13:01.198Z] === AGENT RUN ===
+[2026-06-13T11:13:01.204Z] Full mode: swap execution enabled
+[2026-06-13T11:13:01.205Z] Cooldown active
+[2026-06-13T11:13:01.999Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:13:02.509Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:13:20.129Z] Top 5:
+[2026-06-13T11:13:20.129Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:13:20.130Z]   VVV: sc=7 $17.2600 18.0% RS--
+[2026-06-13T11:13:20.130Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:13:20.130Z]   AAVE: sc=4 $66.5900 3.0% RS--
+[2026-06-13T11:13:20.130Z]   KAITO: sc=3 $0.4266 2.5% RSI=45
+[2026-06-13T11:13:24.729Z] NEAR: 1.467
+[2026-06-13T11:13:24.729Z]   AAVE: 0.233180
+[2026-06-13T11:13:24.730Z]   USDC: 0.817149
+[2026-06-13T11:13:24.730Z] Decision: ROTATE — VVV(7) > AAVE(4)
+[2026-06-13T11:13:24.730Z] Would trade but cooldown
+[2026-06-13T11:13:24.731Z] ── Portfolio ──
+[2026-06-13T11:13:24.732Z]   AAVE: 0.233180 × $66.5900 = $15.53
+[2026-06-13T11:13:24.732Z]   USDC: 0.82 × $1.0000 = $0.82
+[2026-06-13T11:13:24.732Z]   NEAR: 1.467 × $2.02 = $2.96
+[2026-06-13T11:13:24.732Z]   Total: $19.31 | Δprev: +0.00 (+0.01%) | Δstart: -0.05 (-0.27%)
+[2026-06-13T11:13:24.732Z] ── ─────── ──
+[2026-06-13T11:13:24.732Z] === DONE ===
+[2026-06-13T11:15:01.575Z] === AGENT RUN ===
+[2026-06-13T11:15:01.578Z] Full mode: swap execution enabled
+[2026-06-13T11:15:02.425Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:15:02.831Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:15:20.260Z] Top 5:
+[2026-06-13T11:15:20.260Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:15:20.260Z]   VVV: sc=7 $17.3000 18.2% RSI=79
+[2026-06-13T11:15:20.260Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:15:20.260Z]   AAVE: sc=4 $66.6700 3.1% RSI=75
+[2026-06-13T11:15:20.261Z]   KAITO: sc=3 $0.4267 2.5% RSI=45
+[2026-06-13T11:15:24.691Z] NEAR: 1.467
+[2026-06-13T11:15:24.691Z]   AAVE: 0.233180
+[2026-06-13T11:15:24.691Z]   USDC: 0.817149
+[2026-06-13T11:15:24.692Z] Decision: ROTATE — VVV(7) > AAVE(4)
+[2026-06-13T11:15:24.692Z] Executing...
+[2026-06-13T11:15:24.692Z] Rotate AAVE→USDC...
+[2026-06-13T11:15:25.663Z]   Swap AAVE→USDC addr=c567c0c25b4efe93...
+[2026-06-13T11:15:27.099Z]   Intent: HXpyUd3j3ZMJGS1Q...
+[2026-06-13T11:15:32.296Z]   SETTLED
+[2026-06-13T11:15:45.191Z]   ✅ 15.582996 USDC
+[2026-06-13T11:15:45.192Z] ── Portfolio ──
+[2026-06-13T11:15:45.192Z]   AAVE: 0.233180 × $66.6700 = $15.55
+[2026-06-13T11:15:45.192Z]   USDC: 0.82 × $1.0000 = $0.82
+[2026-06-13T11:15:45.192Z]   NEAR: 1.467 × $2.02 = $2.96
+[2026-06-13T11:15:45.192Z]   Total: $19.33 | Δprev: +0.02 (+0.10%) | Δstart: -0.03 (-0.17%)
+[2026-06-13T11:15:45.192Z] ── ─────── ──
+[2026-06-13T11:15:45.192Z] === DONE ===
+[2026-06-13T11:20:01.331Z] === AGENT RUN ===
+[2026-06-13T11:20:01.335Z] Full mode: swap execution enabled
+[2026-06-13T11:20:01.335Z] Cooldown active
+[2026-06-13T11:20:02.253Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:20:05.204Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:20:27.220Z] Top 5:
+[2026-06-13T11:20:27.220Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:20:27.220Z]   VVV: sc=7 $17.4500 19.3% RSI=79
+[2026-06-13T11:20:27.220Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:20:27.221Z]   APT: sc=4 $0.6711 2.2% RSI=68
+[2026-06-13T11:20:27.221Z]   AAVE: sc=4 $66.8300 3.3% RSI=75
+[2026-06-13T11:20:31.864Z] NEAR: 1.467
+[2026-06-13T11:20:31.864Z]   USDC: 16.400145
+[2026-06-13T11:20:31.865Z] Decision: BUY — Buy VVV (sc=7) #1/3
+[2026-06-13T11:20:31.865Z] Would trade but cooldown
+[2026-06-13T11:20:31.866Z] ── Portfolio ──
+[2026-06-13T11:20:31.866Z]   USDC: 16.40 × $1.0000 = $16.40
+[2026-06-13T11:20:31.866Z]   NEAR: 1.467 × $2.03 = $2.98
+[2026-06-13T11:20:31.866Z]   Total: $19.38 | Δprev: +0.05 (+0.27%) | Δstart: +0.02 (+0.10%) | Fees: $0.00
+[2026-06-13T11:20:31.867Z] ── ─────── ──
+[2026-06-13T11:20:31.867Z] === DONE ===
+[2026-06-13T11:20:45.914Z] === AGENT RUN ===
+[2026-06-13T11:20:45.920Z] Full mode: swap execution enabled
+[2026-06-13T11:20:46.589Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:20:46.787Z] CG price err: RATE_LIMITED
+[2026-06-13T11:21:04.166Z] Top 5:
+[2026-06-13T11:21:04.168Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:21:04.168Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:21:04.168Z]   USDon: sc=3 $99.7500 1.4% RSI=59
+[2026-06-13T11:21:04.168Z]   TLTon: sc=2 $85.7700 -0.8% RSI=61
+[2026-06-13T11:21:04.169Z]   AGGon: sc=2 $98.7600 -0.6% RSI=56
+[2026-06-13T11:21:08.675Z] NEAR: 1.467
+[2026-06-13T11:21:08.675Z]   USDC: 16.400145
+[2026-06-13T11:21:08.676Z] Decision: HOLD — No positions, waiting for crypto opp (sc≥3 RSI<80)
+[2026-06-13T11:21:08.676Z] ── Portfolio ──
+[2026-06-13T11:21:08.676Z]   USDC: 16.40 × $1.0000 = $16.40
+[2026-06-13T11:21:08.676Z]   NEAR: 1.467 × $2.02 = $2.96
+[2026-06-13T11:21:08.677Z]   Total: $19.36 | Δprev: +0.00 (+0.02%) | Δstart: +0.00 (+0.02%) | Fees: $0.00 | Perf: $0.00
+[2026-06-13T11:21:08.677Z] ── ─────── ──
+[2026-06-13T11:21:08.677Z] === DONE ===
+[2026-06-13T11:25:01.984Z] === AGENT RUN ===
+[2026-06-13T11:25:01.986Z] Full mode: swap execution enabled
+[2026-06-13T11:25:02.687Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:25:02.992Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:25:20.286Z] Top 5:
+[2026-06-13T11:25:20.286Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:25:20.286Z]   VVV: sc=7 $17.5200 19.8% RSI=79
+[2026-06-13T11:25:20.287Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:25:20.287Z]   APT: sc=4 $0.6722 2.4% RSI=68
+[2026-06-13T11:25:20.287Z]   AAVE: sc=4 $66.9200 3.4% RSI=75
+[2026-06-13T11:25:24.752Z] NEAR: 1.467
+[2026-06-13T11:25:24.752Z]   USDC: 16.400145
+[2026-06-13T11:25:24.753Z] Decision: BUY — Buy VVV (sc=7) #1/3
+[2026-06-13T11:25:24.753Z] Executing...
+[2026-06-13T11:25:24.753Z] Buy VVV $9.84 (#1/3)...
+[2026-06-13T11:25:25.519Z]   Spread: 0.00%
+[2026-06-13T11:25:25.520Z]   Swap USDC→VVV addr=dc314bff12c519e4...
+[2026-06-13T11:25:26.438Z]   Intent: 8gC1s5PQ7NSXp8sF...
+[2026-06-13T11:25:31.610Z]   SETTLED
+[2026-06-13T11:25:50.505Z]   ✅ 0.561887552644045869 VVV
+[2026-06-13T11:25:50.506Z] ── Portfolio ──
+[2026-06-13T11:25:50.506Z]   USDC: 16.40 × $1.0000 = $16.40
+[2026-06-13T11:25:50.506Z]   NEAR: 1.467 × $2.04 = $2.99
+[2026-06-13T11:25:50.506Z]   Total: $19.39 | Δprev: +0.03 (+0.15%) | Δstart: +0.03 (+0.17%) | Fees: $0.00 | Perf: $0.03
+[2026-06-13T11:25:50.506Z] ── ─────── ──
+[2026-06-13T11:25:50.506Z] === DONE ===
+[2026-06-13T11:30:01.633Z] === AGENT RUN ===
+[2026-06-13T11:30:01.635Z] Full mode: swap execution enabled
+[2026-06-13T11:30:01.636Z] Cooldown active
+[2026-06-13T11:30:03.339Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:30:03.947Z] CG prices: aave,aptos,kaito,near,venice-token
+[2026-06-13T11:30:22.643Z] Top 5:
+[2026-06-13T11:30:22.643Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:30:22.643Z]   VVV: sc=7 $17.5300 19.8% RSI=79
+[2026-06-13T11:30:22.644Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:30:22.644Z]   APT: sc=4 $0.6722 2.4% RSI=68
+[2026-06-13T11:30:22.644Z]   AAVE: sc=4 $66.9400 3.3% RSI=75
+[2026-06-13T11:30:28.116Z] NEAR: 1.467
+[2026-06-13T11:30:28.116Z]   VVV: 0.561888
+[2026-06-13T11:30:28.117Z]   USDC: 6.560059
+[2026-06-13T11:30:28.117Z] Decision: HOLD — APT available but not tradeable or too small buy
+[2026-06-13T11:30:28.118Z] ── Portfolio ──
+[2026-06-13T11:30:28.118Z]   VVV: 0.561888 × $17.5300 = $9.85
+[2026-06-13T11:30:28.118Z]   USDC: 6.56 × $1.0000 = $6.56
+[2026-06-13T11:30:28.118Z]   NEAR: 1.467 × $2.04 = $2.99
+[2026-06-13T11:30:28.118Z]   Total: $19.40 | Δprev: +0.01 (+0.05%) | Δstart: +0.04 (+0.22%) | Fees: $0.00 | Perf: $0.04
+[2026-06-13T11:30:28.118Z] ── ─────── ──
+[2026-06-13T11:30:28.118Z] === DONE ===
+[2026-06-13T11:30:33.839Z] === AGENT RUN ===
+[2026-06-13T11:30:33.844Z] Full mode: swap execution enabled
+[2026-06-13T11:30:33.845Z] Cooldown active
+[2026-06-13T11:30:34.771Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:30:35.404Z] CG price err: RATE_LIMITED
+[2026-06-13T11:30:56.590Z] Top 5:
+[2026-06-13T11:30:56.591Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:30:56.591Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:30:56.591Z]   USDon: sc=3 $99.8070 1.5% RSI=59
+[2026-06-13T11:30:56.592Z]   TLTon: sc=2 $85.7700 -0.8% RSI=61
+[2026-06-13T11:30:56.593Z]   AGGon: sc=2 $98.7600 -0.6% RSI=56
+[2026-06-13T11:31:01.061Z] NEAR: 1.467
+[2026-06-13T11:31:01.061Z]   VVV: 0.561888
+[2026-06-13T11:31:01.061Z]   USDC: 6.560059
+[2026-06-13T11:31:01.061Z]   AURORA: 76.262377
+[2026-06-13T11:31:01.062Z] Decision: HOLD — Holding 2/3, no better candidate found
+[2026-06-13T11:31:01.063Z] ── Portfolio ──
+[2026-06-13T11:31:01.063Z]   VVV: 0.561888 × $13.4100 = $7.53
+[2026-06-13T11:31:01.063Z]   USDC: 6.56 × $1.0000 = $6.56
+[2026-06-13T11:31:01.063Z]   AURORA: 76.262377 × $0.0260 = $1.98
+[2026-06-13T11:31:01.063Z]   NEAR: 1.467 × $2.02 = $2.96
+[2026-06-13T11:31:01.063Z]   Total: $19.04 | Δprev: -0.36 (-1.87%) | Δstart: -0.32 (-1.65%) | Fees: $0.00 | Perf: $-0.32
+[2026-06-13T11:31:01.063Z] ── ─────── ──
+[2026-06-13T11:31:01.063Z] === DONE ===
+[2026-06-13T11:31:45.272Z] === AGENT RUN ===
+[2026-06-13T11:31:45.277Z] Full mode: swap execution enabled
+[2026-06-13T11:31:45.942Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:31:46.316Z] CG prices: aave,aptos,aurora-near,kaito,near,venice-token
+[2026-06-13T11:32:07.293Z] Top 5:
+[2026-06-13T11:32:07.293Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:32:07.293Z]   VVV: sc=7 $17.5200 20.0% RSI=79
+[2026-06-13T11:32:07.294Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:32:07.294Z]   APT: sc=4 $0.6726 2.4% RSI=68
+[2026-06-13T11:32:07.294Z]   AAVE: sc=4 $66.9600 3.5% RSI=75
+[2026-06-13T11:32:11.723Z] NEAR: 1.467
+[2026-06-13T11:32:11.724Z]   VVV: 0.561888
+[2026-06-13T11:32:11.724Z]   USDC: 6.560059
+[2026-06-13T11:32:11.724Z]   AURORA: 76.262377
+[2026-06-13T11:32:11.724Z] Decision: SELL — AURORA weak sc=-1
+[2026-06-13T11:32:11.725Z] Executing...
+[2026-06-13T11:32:11.725Z] Sell AURORA→USDC...
+[2026-06-13T11:32:12.457Z]   Spread: 0.00%
+[2026-06-13T11:32:12.457Z]   Swap AURORA→USDC addr=acd1b7296cf15c59...
+[2026-06-13T11:32:13.383Z]   Intent: DhbHKHFqjTYKjNho...
+[2026-06-13T11:32:18.713Z]   SETTLED
+[2026-06-13T11:32:31.811Z]   ✅ 2.034633 USDC
+[2026-06-13T11:32:31.812Z] ── Portfolio ──
+[2026-06-13T11:32:31.813Z]   VVV: 0.561888 × $17.5200 = $9.84
+[2026-06-13T11:32:31.813Z]   USDC: 6.56 × $1.0000 = $6.56
+[2026-06-13T11:32:31.813Z]   AURORA: 76.262377 × $0.0266 = $2.03
+[2026-06-13T11:32:31.813Z]   NEAR: 1.467 × $2.04 = $2.99
+[2026-06-13T11:32:31.813Z]   Total: $21.43 | Δprev: +2.39 (+12.53%) | Δstart: +2.07 (+10.68%) | Fees: $0.00 | Perf: $2.07
+[2026-06-13T11:32:31.813Z] ── ─────── ──
+[2026-06-13T11:32:31.813Z] === DONE ===
+[2026-06-13T11:35:01.230Z] === AGENT RUN ===
+[2026-06-13T11:35:01.232Z] Full mode: swap execution enabled
+[2026-06-13T11:35:01.233Z] Cooldown active
+[2026-06-13T11:35:02.036Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:35:02.447Z] CG prices: aave,aptos,aurora-near,kaito,near,venice-token
+[2026-06-13T11:35:23.373Z] Top 5:
+[2026-06-13T11:35:23.373Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:35:23.374Z]   VVV: sc=7 $17.5400 20.2% RSI=79
+[2026-06-13T11:35:23.374Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:35:23.374Z]   APT: sc=4 $0.6710 2.1% RSI=68
+[2026-06-13T11:35:23.375Z]   AAVE: sc=4 $66.8800 3.4% RSI=75
+[2026-06-13T11:35:27.838Z] NEAR: 1.467
+[2026-06-13T11:35:27.838Z]   VVV: 0.561888
+[2026-06-13T11:35:27.838Z]   USDC: 8.594692
+[2026-06-13T11:35:27.839Z] Decision: BUY — Buy APT (sc=4) #2/3
+[2026-06-13T11:35:27.840Z] Would trade but cooldown
+[2026-06-13T11:35:27.840Z] ── Portfolio ──
+[2026-06-13T11:35:27.841Z]   VVV: 0.561888 × $17.5400 = $9.86
+[2026-06-13T11:35:27.841Z]   USDC: 8.59 × $1.0000 = $8.59
+[2026-06-13T11:35:27.841Z]   NEAR: 1.467 × $2.04 = $2.99
+[2026-06-13T11:35:27.841Z]   Total: $21.44 | Δprev: +0.02 (+0.07%) | Δstart: +2.08 (+10.76%) | Fees: $0.00 | Perf: $2.08
+[2026-06-13T11:35:27.841Z] ── ─────── ──
+[2026-06-13T11:35:27.841Z] === DONE ===
+[2026-06-13T11:40:01.956Z] === AGENT RUN ===
+[2026-06-13T11:40:01.958Z] Full mode: swap execution enabled
+[2026-06-13T11:40:02.803Z] F&G: 13/100 Extreme Fear
+[2026-06-13T11:40:03.216Z] CG prices: aave,aptos,aurora-near,kaito,near,venice-token
+[2026-06-13T11:40:25.058Z] Top 5:
+[2026-06-13T11:40:25.059Z]   QQQon: sc=9 $721.3400 18.0% RSI=51
+[2026-06-13T11:40:25.059Z]   VVV: sc=7 $17.2900 18.7% RSI=79
+[2026-06-13T11:40:25.059Z]   SPYon: sc=7 $741.7500 9.2% RSI=47
+[2026-06-13T11:40:25.059Z]   APT: sc=4 $0.6691 2.0% RSI=68
+[2026-06-13T11:40:25.059Z]   AAVE: sc=4 $66.8100 3.4% RSI=75
+[2026-06-13T11:40:29.455Z] NEAR: 1.467
+[2026-06-13T11:40:29.455Z]   VVV: 0.561888
+[2026-06-13T11:40:29.456Z]   USDC: 8.594692
+[2026-06-13T11:40:29.456Z] Decision: BUY — Buy APT (sc=4) #2/3
+[2026-06-13T11:40:29.456Z] Executing...
+[2026-06-13T11:40:29.456Z]   Buy too small ($4.30 < $5)
+[2026-06-13T11:40:29.457Z] ── Portfolio ──
+[2026-06-13T11:40:29.457Z]   VVV: 0.561888 × $17.2900 = $9.72
+[2026-06-13T11:40:29.457Z]   USDC: 8.59 × $1.0000 = $8.59
+[2026-06-13T11:40:29.457Z]   NEAR: 1.467 × $2.04 = $2.99
+[2026-06-13T11:40:29.457Z]   Total: $21.30 | Δprev: -0.14 (-0.66%) | Δstart: +1.94 (+10.03%) | Fees: $0.00 | Perf: $1.94
+[2026-06-13T11:40:29.457Z] ── ─────── ──
+[2026-06-13T11:40:29.457Z] === DONE ===

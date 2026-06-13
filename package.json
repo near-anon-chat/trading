@@ -1,5 +1,7 @@
 {
   "dependencies": {
-    "technicalindicators": "^3.1.0"
+    "bs58": "^6.0.0",
+    "technicalindicators": "^3.1.0",
+    "tweetnacl": "^1.0.3"
   }
 }
