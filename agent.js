@@ -66,7 +66,7 @@ CG_IDS.wNEAR = 'near';
 // Override auto-mapped IDs for tokens where coinList.json picks wrong bridged entry
 const CG_OVERRIDES = {
   BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple',
-  DOGE: 'dogecoin', ADA: 'cardano', AVAX: 'avalanche-2', DOT: 'polkadot',
+  DOGE: 'dogecoin', ADA: 'cardano', AVAAX: 'avalanche-2', DOT: 'polkadot',
   LINK: 'chainlink', UNI: 'uniswap', SHIB: 'shiba-inu', PEPE: 'pepe',
   TON: 'the-open-network', TRX: 'tron', BNB: 'binancecoin', OP: 'optimism',
   ARB: 'arbitrum', LTC: 'litecoin', BCH: 'bitcoin-cash', XLM: 'stellar',
