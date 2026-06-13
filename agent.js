@@ -22,32 +22,77 @@ const MAX_POSITIONS = 3;
 const MIN_POSITION_VALUE = 5.0;
 const MAX_SPREAD_PCT = 4.0;
 
-const PORTFOLIO = [
-  { id: 'nep141:base-0x98d0baa52b2d063e780de12f615f963fe8537553.omft.near', sym: 'KAITO', dec: 18 },
-  { id: 'nep141:base-0xacfe6019ed1a7dc6f7b508c02d1b04ec88cc21bf.omft.near', sym: 'VVV', dec: 18 },
-  { id: 'nep141:aptos.omft.near', sym: 'APT', dec: 8 },
-  { id: 'nep141:eth-0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9.omft.near', sym: 'AAVE', dec: 18 },
-  { id: USDC_NEAR, sym: 'USDC', dec: 6 },
-  { id: 'nep141:aaaaaa20d9e0e2461697782ef11675f668207961.factory.bridge.near', sym: 'AURORA', dec: 18 },
-];
+// Load all tradeable tokens from registry (exclude omdep.near — no swap routes)
+function loadTradeableTokens() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(PROJECT, 'tokens.json'), 'utf8'));
+    const list = Array.isArray(raw) ? raw : (raw.tokens || raw.result || []);
+    const seen = new Set();
+    const pf = [];
+    for (const t of list) {
+      const aid = t.assetId || '';
+      const sym = t.symbol;
+      if (!sym || !aid) continue;
+      if (aid.includes('omdep.near')) continue;
+      if (seen.has(sym)) continue;
+      seen.add(sym);
+      pf.push({ id: aid, sym, dec: t.decimals ?? 18 });
+    }
+    if (!pf.find(p => p.id === USDC_NEAR)) pf.push({ id: USDC_NEAR, sym: 'USDC', dec: 6 });
+    return pf;
+  } catch(e) {
+    // Fallback: minimal working set
+    return [
+      { id: USDC_NEAR, sym: 'USDC', dec: 6 },
+      { id: 'nep141:base-0xacfe6019ed1a7dc6f7b508c02d1b04ec88cc21bf.omft.near', sym: 'VVV', dec: 18 },
+    ];
+  }
+}
 
-// Resolve CG IDs from coinList.json (auto-mapping)
+const PORTFOLIO = loadTradeableTokens();
+
+// Auto-map CG IDs from coinList.json by symbol
 let CG_IDS = {};
 try {
   const cl = JSON.parse(fs.readFileSync(path.join(PROJECT, 'coinList.json'), 'utf8'));
-  for (const sym of ['KAITO', 'VVV', 'APT', 'AAVE', 'AURORA', 'wNEAR']) {
-    const entry = cl.find(c => c.symbol === sym.toLowerCase());
+  for (const sym of PORTFOLIO.map(p => p.sym)) {
+    const cgSym = sym === 'wNEAR' ? 'near' : sym.toLowerCase();
+    const entry = cl.find(c => c.symbol === cgSym);
     if (entry) CG_IDS[sym] = entry.id;
   }
-} catch(e) { log('WARN could not load coinList.json'); }
+} catch(e) {}
 // wNEAR price = NEAR price
 CG_IDS.wNEAR = 'near';
-// fallbacks if coinList failed
-if (!CG_IDS.KAITO) CG_IDS.KAITO = 'kaito';
-if (!CG_IDS.VVV) CG_IDS.VVV = 'venice-token';
-if (!CG_IDS.APT) CG_IDS.APT = 'aptos';
-if (!CG_IDS.AAVE) CG_IDS.AAVE = 'aave';
-if (!CG_IDS.AURORA) CG_IDS.AURORA = 'aurora-near';
+// Override auto-mapped IDs for tokens where coinList.json picks wrong bridged entry
+const CG_OVERRIDES = {
+  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple',
+  DOGE: 'dogecoin', ADA: 'cardano', AVAX: 'avalanche-2', DOT: 'polkadot',
+  LINK: 'chainlink', UNI: 'uniswap', SHIB: 'shiba-inu', PEPE: 'pepe',
+  TON: 'the-open-network', TRX: 'tron', BNB: 'binancecoin', OP: 'optimism',
+  ARB: 'arbitrum', LTC: 'litecoin', BCH: 'bitcoin-cash', XLM: 'stellar',
+  ATOM: 'cosmos', NEAR: 'near', DAI: 'dai', FRAX: 'frax',
+  APT: 'aptos', SUI: 'sui', AAVE: 'aave', MKR: 'maker',
+  CRV: 'curve-dao-token', COMP: 'compound-governance-token', RUNE: 'thorchain',
+  FIL: 'filecoin', ICP: 'internet-computer', ETC: 'ethereum-classic',
+  ALGO: 'algorand', ZEC: 'zcash', DASH: 'dash', AKT: 'akash-network',
+  FET: 'fetch-ai', AGIX: 'singularitynet', OCEAN: 'ocean-protocol',
+  GRT: 'the-graph', SAND: 'the-sandbox', MANA: 'decentraland',
+  SNX: 'synthetix-network-token', YFI: 'yearn-finance', SUSHI: 'sushi',
+  CAKE: 'pancakeswap-token', KNC: 'kyber-network-crystal', BAL: 'balancer',
+  LDO: 'lido-dao', FXS: 'frax-share', CVX: 'convex-finance',
+  SPELL: 'spell-token', MINA: 'mina-protocol', FLOW: 'flow',
+  FTM: 'fantom', MATIC: 'matic-network', HNT: 'helium',
+  ANKR: 'ankr', ENJ: 'enjincoin', BAT: 'basic-attention-token',
+  ZIL: 'zilliqa', IOST: 'iostoken', IOTX: 'iotex',
+  ONT: 'ontology', VET: 'vechain', THETA: 'theta-token',
+  TFUEL: 'theta-fuel', HOT: 'holotoken', CHZ: 'chiliz',
+  AUDIO: 'audius', GALA: 'gala', RNDR: 'render-token',
+  IMX: 'immutable-x', APE: 'apecoin', BLUR: 'blur',
+};
+for (const [sym, id] of Object.entries(CG_OVERRIDES)) { CG_IDS[sym] = id; }
+// Additional fallbacks for tokens not in coinList.json
+const CG_FALLBACKS = { KAITO: 'kaito', VVV: 'venice-token', AURORA: 'aurora-near', GNO: 'gnosis', XAUT: 'tether-gold', MON: 'mon-protocol' };
+for (const [sym, id] of Object.entries(CG_FALLBACKS)) { if (!CG_IDS[sym]) CG_IDS[sym] = id; }
 const ETF_MAP = { SPYon: 'SPY', QQQon: 'QQQ', GLDon: 'GLD', TLTon: 'TLT', AGGon: 'AGG', USDon: 'DX-Y.NYB' };
 
 function log(...a) {
@@ -112,7 +157,7 @@ async function fetchFG() {
   } catch(e) { return { v: 50, t: '?' }; }
 }
 
-async function fetchPrices(ids) {
+async function fetchCGData(ids) {
   if (!ids.length) return {};
   try {
     const r = await httpGet(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`);
@@ -120,20 +165,20 @@ async function fetchPrices(ids) {
     return r;
   } catch(e) {
     log('CG price err:', e.message);
-    if (e.message === 'RATE_LIMITED') {
-      // Fallback to cached prices from tokens.json
-      try {
-        const tokens = JSON.parse(fs.readFileSync(path.join(PROJECT, 'tokens.json'), 'utf8'));
-        const prices = {};
-        for (const [sym, cgId] of Object.entries(CG_IDS)) {
-          const token = tokens.find(t => t.symbol === sym);
-          if (token?.price) prices[cgId] = { usd: token.price, usd_24h_change: 0, usd_24h_vol: 0 };
-        }
-        return prices;
-      } catch(e2) { /* no fallback */ }
-      await sleep(60000);
-      return {};
-    }
+    return {};
+  }
+}
+
+async function fetch1ClickPrices() {
+  try {
+    const data = await httpGet('https://1click.chaindefuser.com/v0/tokens', { 'Authorization': `Bearer ${process.env.NEAR_SWAP_JWT_TOKEN}` });
+    if (!Array.isArray(data)) { log('1Click: unexpected response'); return {}; }
+    const prices = {};
+    for (const t of data) { if (t.symbol && t.price != null) prices[t.symbol] = t; }
+    log(`1Click: ${Object.keys(prices).length} token prices`);
+    return prices;
+  } catch(e) {
+    log('1Click price err:', e.message);
     return {};
   }
 }
@@ -309,16 +354,19 @@ async function main() {
   log(`F&G: ${fg.v}/100 ${fg.t}`);
 
   const allCgIds = [...new Set(Object.values(CG_IDS))];
-  const cgPrices = await fetchPrices(allCgIds);
+  const [cgData, clickPrices] = await Promise.all([fetchCGData(allCgIds), fetch1ClickPrices()]);
 
   const assets = {};
 
   // Crypto
   for (const [sym, id] of Object.entries(CG_IDS)) {
-    const d = cgPrices[id];
-    if (d) {
-      assets[sym] = { p: d.usd, ch: d.usd_24h_change || 0, v: d.usd_24h_vol || 0, sc: score(d.usd_24h_change || 0, d.usd_24h_vol || 0, 'c') };
-    }
+    const cg = cgData[id];
+    const c1 = clickPrices[sym];
+    const price = c1?.price ?? cg?.usd ?? null;
+    if (price == null) continue;
+    const ch = cg?.usd_24h_change ?? 0;
+    const vol = cg?.usd_24h_vol ?? 0;
+    assets[sym] = { p: price, ch, v: vol, sc: score(ch, vol, 'c') };
   }
 
   // ETFs
@@ -337,20 +385,30 @@ async function main() {
     mktCount++;
   }
 
-  // RSI — top scorers + portfolio
+  // Load failed tokens + last positions from history for RSI + candidate filtering
+  let failedTokens = new Set();
+  let lastPos = [];
+  try {
+    const h = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+    if (Array.isArray(h) && h.length > 0) {
+      failedTokens = new Set(h[h.length - 1].failedTokens || []);
+      lastPos = (h[h.length - 1].pos || []).map(p => p.s);
+    }
+  } catch(e) {}
+  // omdep.near tokens confirmed no swap routes on 1Click
+  for (const sym of ['GLDon', 'TLTon', 'AGGon', 'USDon']) failedTokens.add(sym);
+
+  // RSI — held tokens (from history) + top 15 scorers
   const sorted = Object.entries(assets).sort((a, b) => b[1].sc - a[1].sc);
-  const top10 = sorted.slice(0, 10).map(e => e[0]);
-  const rsiFor = [...new Set([...PORTFOLIO.map(p => p.sym), ...top10])].filter(s => CG_IDS[s]);
+  const top15 = sorted.slice(0, 15).map(e => e[0]);
+  const rsiFor = [...new Set([...lastPos, ...top15])].filter(s => CG_IDS[s] && CG_IDS[s] !== 'near');
 
   const rsis = {};
-  // Skip near CG ID for OHLC (not a token with price history that way)
   for (const sym of rsiFor) {
     const id = CG_IDS[sym];
-    if (id && id !== 'near') {
-      const c = await fetchOHLC(id);
-      if (c) rsis[sym] = rsi(c);
-      await sleep(3500);
-    }
+    const c = await fetchOHLC(id);
+    if (c) rsis[sym] = rsi(c);
+    await sleep(2000);
   }
   // ETF RSI from stored data
   for (const [sym, d] of Object.entries(etfData)) {
@@ -374,7 +432,7 @@ async function main() {
   // Valuations
   const pricedPositions = hasPositions.map(h => {
     const p = h.sym === 'USDC' ? 1 : (assets[h.sym]?.p || 0);
-    return { ...h, price: p, value: p * h.human, score: h.sym === 'USDC' ? 0 : (assets[h.sym]?.sc || 0), rsi: rsis[h.sym] };
+    return { ...h, price: p, value: p * h.human, score: h.sym === 'USDC' ? 0 : (assets[h.sym]?.sc || 0), ch: assets[h.sym]?.ch, rsi: rsis[h.sym] };
   });
   const totalValue = pricedPositions.reduce((s, p) => s + p.value, 0);
   // exclude USDC from total for decision purposes (it's the stable)
@@ -390,21 +448,22 @@ async function main() {
     // Check each existing position for weakness first
     for (const p of nonStablePositions) {
       if (p.rsi !== undefined && p.rsi > 85) { action = 'SELL'; reason = `${p.sym} OB RSI=${p.rsi.toFixed(0)}`; break; }
-      if (p.score < 1) { action = 'SELL'; reason = `${p.sym} weak sc=${p.score}`; break; }
+      // Only trust score-based sell if price data is fresh (24h_change was actually fetched)
+      if (p.score < 1 && p.ch !== undefined && p.ch !== null && p.ch !== 0) { action = 'SELL'; reason = `${p.sym} weak sc=${p.score}`; break; }
     }
     // Check rotation if no immediate sell
     if (action === 'HOLD') {
       const worst = nonStablePositions.reduce((w, p) => p.score < (w?.score ?? Infinity) ? p : w, nonStablePositions[0]);
-      const bestNew = ranked.find(a => a.sc >= 3 && (a.r === undefined || a.r < 80) && !ETF_MAP[a.sym] && !nonStablePositions.find(p => p.sym === a.sym) && a.sc >= (worst?.score || 0) + 3);
+      const bestNew = ranked.find(a => a.sc >= 3 && (a.r === undefined || a.r < 80) && !failedTokens.has(a.sym) && !nonStablePositions.find(p => p.sym === a.sym) && a.sc >= (worst?.score || 0) + 3);
       if (bestNew) { action = 'ROTATE'; reason = `${bestNew.sym}(${bestNew.sc}) > ${worst.sym}(${worst.score})`; }
     }
   }
   // If no sell/rotate and room to buy more
   if (action === 'HOLD' && nonStablePositions.length < MAX_POSITIONS) {
     const heldSyms = new Set(nonStablePositions.map(p => p.sym));
-    const candidate = ranked.find(a => a.sc >= 3 && (a.r === undefined || a.r < 80) && !ETF_MAP[a.sym] && !heldSyms.has(a.sym));
+    const candidate = ranked.find(a => a.sc >= 3 && (a.r === undefined || a.r < 80) && !failedTokens.has(a.sym) && !heldSyms.has(a.sym));
     const usdcForBuy = usdcBal?.human || 0;
-    if (candidate && PORTFOLIO.find(p => p.sym === candidate.sym) && usdcForBuy * (assets[candidate.sym]?.p || 1) >= MIN_POSITION_VALUE) {
+    if (candidate && PORTFOLIO.find(p => p.sym === candidate.sym) && usdcForBuy >= MIN_POSITION_VALUE) {
       action = 'BUY'; reason = `Buy ${candidate.sym} (sc=${candidate.sc}) #${nonStablePositions.length + 1}/${MAX_POSITIONS}`;
     } else if (candidate) {
       reason = `${candidate.sym} available but not tradeable or too small buy`;
@@ -419,6 +478,7 @@ async function main() {
 
   // Execute
   let lastSwapFee = 0;
+  let newFailedTokens = new Set();
   if (action !== 'HOLD' && ok && canExec) {
     log('Executing...');
 
@@ -449,23 +509,31 @@ async function main() {
       else log(`  Rotate skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
     } else if (action === 'BUY') {
       const heldSyms = new Set(nonStablePositions.map(p => p.sym));
-      const best = ranked.find(a => a.sc >= 3 && (a.r === undefined || a.r < 80) && !ETF_MAP[a.sym] && !heldSyms.has(a.sym));
-      if (best && usdcBal?.human > MIN_POSITION_VALUE / (assets[best.sym]?.p || 1)) {
+      const tried = new Set();
+      for (const best of ranked) {
+        if (best.sc < 3) break;
+        if (tried.has(best.sym) || heldSyms.has(best.sym) || failedTokens.has(best.sym) || (best.r !== undefined && best.r >= 80)) continue;
+        tried.add(best.sym);
         const target = PORTFOLIO.find(p => p.sym === best.sym);
-        if (target) {
-          // Allocation: 1st=60%, 2nd=50% of remaining, 3rd=rest (min $5)
-          let frac = 0.6;
-          if (nonStablePositions.length === 1) frac = 0.5;
-          else if (nonStablePositions.length >= 2) frac = 1;
-          const buyUsd = usdcBal.human * frac;
-          const amt = Math.floor(buyUsd * 1e6); // USDC has 6 decimals
-          if (amt >= Math.floor(MIN_POSITION_VALUE * 1e6)) {
-            log(`Buy ${best.sym} $${buyUsd.toFixed(2)} (#${nonStablePositions.length + 1}/${MAX_POSITIONS})...`);
-            const r = await execSwap({ id: USDC_NEAR, sym: 'USDC', dec: 6 }, target, amt.toString(), env.pk, assets);
-            if (r?.feeUsd || r?.spread) lastSwapFee = r.feeUsd || 0;
-            if (r?.ok) markTrade();
-            else log(`  Buy skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
-          } else log(`  Buy too small ($${buyUsd.toFixed(2)} < $${MIN_POSITION_VALUE})`);
+        if (!target) continue;
+        if (!(usdcBal?.human > MIN_POSITION_VALUE / (assets[best.sym]?.p || 1))) continue;
+        let buyUsd = 0;
+        if (nonStablePositions.length === 0) {
+          buyUsd = usdcBal.human * 0.6;
+        } else if (nonStablePositions.length === 1) {
+          buyUsd = Math.min(MIN_POSITION_VALUE, usdcBal.human - 0.5);
+        } else {
+          buyUsd = usdcBal.human - 0.5;
+        }
+        const amt = Math.floor(buyUsd * 1e6);
+        if (amt < Math.floor(MIN_POSITION_VALUE * 1e6)) break;
+        log(`Buy ${best.sym} $${buyUsd.toFixed(2)} (#${nonStablePositions.length + 1}/${MAX_POSITIONS})...`);
+        const r = await execSwap({ id: USDC_NEAR, sym: 'USDC', dec: 6 }, target, amt.toString(), env.pk, assets);
+        if (r?.feeUsd || r?.spread) lastSwapFee = r.feeUsd || 0;
+        if (r?.ok) { markTrade(); break; }
+        else {
+          if (r === null) newFailedTokens.add(best.sym);
+          log(`  Buy skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
         }
       }
     }
@@ -495,8 +563,10 @@ async function main() {
   // Accumulate swap fees
   if (typeof lastSwapFee === 'number' && lastSwapFee > 0) accruedFees += lastSwapFee;
 
+  // Merge new failed tokens into existing list
+  for (const s of newFailedTokens) failedTokens.add(s);
   const now = new Date();
-  history.push({ t: now.toISOString(), total: grandTotal, totalFees: accruedFees, near: nearValue, nearBal, pos: pricedPositions.filter(p => p.value > 0).map(p => ({ s: p.sym, q: p.human, v: p.value })) });
+  history.push({ t: now.toISOString(), total: grandTotal, totalFees: accruedFees, near: nearValue, nearBal, failedTokens: [...failedTokens], pos: pricedPositions.filter(p => p.value > 0).map(p => ({ s: p.sym, q: p.human, v: p.value })) });
   history = history.slice(-100);
   try { fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2)); } catch(e) {}
 

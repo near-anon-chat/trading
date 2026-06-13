@@ -205,6 +205,7 @@ The 1Click `submit-intent` endpoint will accept incorrect signatures (old ad-hoc
 | 25 | 2026-06-13 | VVV (intents) → USDC | 0.9014 VVV ($15.52) | 15.523 USDC | ~20s | Flow B | ✅ |
 | 26 | 2026-06-13 | USDC (intents) → AAVE | 15.53 USDC | 0.2332 AAVE (~$15.53) | ~15s | Flow B | ✅ |
 | 27 | 2026-06-13 | AURORA (intents) → USDC | 76.26 AURORA ($2.03) | 2.035 USDC | ~10s | Flow B | ✅ |
+| 28 | 2026-06-13 | USDC (intents) → OP | 7.23 USDC ($7.23) | 65.13 OP ($7.17) | ~37s | Flow B | ✅ |
 
 ### Notes on rotation
 - Trades 10-13 used Flow B (INTENTS deposit) to sell portfolio tokens → wNEAR in intents
@@ -216,7 +217,8 @@ The 1Click `submit-intent` endpoint will accept incorrect signatures (old ad-hoc
 - Trade 18 diversified into APT (score 5, RSI 59, neutral)
 - Trade 20 exited XPL for KAITO (swing candidate, RSI ~55, score 3, good volume)
 - Trades 21-24: **Agent risk-off trigger** — sold all positions to USDC (F&G=13 Extreme Fear, gold down). One token per cycle.
-- The original portfolio value ($14.57) net loss after all trades: ~$19.36 → **~$19.36** (break-even, spreads ate ~$0.07)
+- Trade 28: Manual buy of OP ($7.23, sc=7, +12.5%) after agent skipped it ($2.25 USDC too low for min $5 position)
+- The original portfolio value ($14.57) net loss after all trades: ~$19.36 → **~$17.92** (OP position at $7.17, spread $0.06)
 
 ---
 
@@ -225,9 +227,10 @@ The 1Click `submit-intent` endpoint will accept incorrect signatures (old ad-hoc
 | Asset | Location | Raw Balance | Decimals | Human Amount | USD Price | Value |
 |-------|----------|-------------|----------|-------------|-----------|-------|
 | VVV | intents | `561888000000000000` | 18 | 0.562 VVV | $17.52 | $9.84 |
-| USDC | intents | `8590093` | 6 | 8.59 USDC | $1.00 | $8.59 |
+| OP | intents | `65130002194256999999` | 18 | 65.13 OP | $0.11 | $7.17 |
 | NEAR | wallet | ~1.467 | 24 | 1.467 NEAR | $2.04 | $2.99 |
-| **Total** | | | | | | **~$21.42** |
+| AAVE | intents | `7439101673240000000` | 18 | 0.0744 AAVE | $66.97 | $4.99 |
+| **Total** | | | | | | **~$24.99** |
 
 ## Token IDs
 - wNEAR: `nep141:wrap.near` (24 decimals)
@@ -240,6 +243,7 @@ The 1Click `submit-intent` endpoint will accept incorrect signatures (old ad-hoc
 - MON: `nep245:v2_1.omni.hot.tg:143_11111111111111111111` (18 decimals)
 - KAITO (Base): `nep141:base-0x98d0baa52b2d063e780de12f615f963fe8537553.omft.near` (18 decimals)
 - APT (Aptos): `nep141:aptos.omft.near` (8 decimals)
+- OP (Optimism): `nep245:v2_1.omni.hot.tg:10_vLAiSt9KfUGKpw5cD3vsSyNYBo7` (18 decimals)
 - USDC (NEAR): `nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1` (6 decimals)
 - USDC (NEAR): `nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1` (6 decimals)
 - USDT0 (Plasma): `nep141:plasma-0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb.omft.near`
@@ -254,6 +258,7 @@ The 1Click `submit-intent` endpoint will accept incorrect signatures (old ad-hoc
 - BERA (Berachain) ✅
 - KAITO (Base) ✅ — score 3, RSI ~55, neutral, swing candidate
 - APT (Aptos) ✅ — score 3, RSI ~59, neutral
+- OP (Optimism) ✅ — score 7, +12.5%, strong momentum
 
 ---
 
