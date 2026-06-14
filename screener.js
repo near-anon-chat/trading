@@ -35,12 +35,8 @@ const ONDO = {
 };
 
 const HOLDINGS = {
-  AURORA: { amount: 76.4547, buyPrice: 0.0269, chain: 'near' },
-  SPX: { amount: 3.21, buyPrice: 0.3178, chain: 'sol' },
-  MON: { amount: 9.30, buyPrice: 0.0215, chain: 'monad' },
-  wNEAR: { amount: 0.1, buyPrice: 2.05, chain: 'near' },
-  VVV: { amount: 0.4231, buyPrice: 14.63, chain: 'base' },
-  INX: { amount: 519.1, buyPrice: 0.00766, chain: 'eth' },
+  ETH: { amount: 0.007248, buyPrice: 1675, chain: 'near' },
+  XAUT: { amount: 0.001059, buyPrice: 4226, chain: 'eth' },
 };
 
 async function main() {
@@ -62,7 +58,7 @@ async function main() {
     const cached = require('fs').existsSync('./coinList.json') ? require('./coinList.json') : null;
     if (cached && cached.length) { coinList = cached; } else {
       coinList = await cg('/api/v3/coins/list');
-      require('fs').writeFileSync('/home/jbx/code/trading/coinList.json', JSON.stringify(coinList));
+      require('fs').writeFileSync('/home/jbz/code/trading/coinList.json', JSON.stringify(coinList));
     }
   } catch(e) { console.error('CoinGecko list failed:', e.message); return; }
 
