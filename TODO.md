@@ -14,47 +14,35 @@
 
 ## Done
 
-- [x] **Block `1cs_v1:*` tokens** (`agent.js:579-582`) — All PORTFOLIO entries with `1cs_v1:` asset IDs are added to `failedTokens` at startup, preventing the agent from buying invisible tokens.
-- [x] **raisedSyms cooldown 10→30 min** (`agent.js:398`) — Prevents near-miss cooldown expiry (e.g., KAITO blocked by 30s at 15:11, then re-bought next cycle).
-- [x] **BTC(OMNI) recovery** (`agent.js:621-651`) — After `fetchBals()`, scans `costBasis` for stranded `1cs_v1:` tokens (balance=0, cost>0) and sells them to USDC.
-- [x] **Route re-check skips `1cs_v1:`** (`agent.js:682`) — The failed-token re-check loop (lines 677-693) used to restore `1cs_v1:` tokens because they have working swap routes, defeating the block. Now it skips them.
-- [x] **TOPUP action** (`agent.js:779-796, 1171-1215`) — When at 3/3 cap with idle USDC ≥$2.00, reinvests into best position below its tier max (60/25/15). In-memory bals + cost basis updated.
+- [x] **Block `1cs_v1:*` tokens** — All PORTFOLIO entries with `1cs_v1:` asset IDs are added to `failedTokens` at startup.
+- [x] **raisedSyms cooldown 10→30 min** — Prevents near-miss cooldown expiry.
+- [x] **BTC(OMNI) recovery** — Scans costBasis for stranded `1cs_v1:` tokens and sells them to USDC.
+- [x] **Route re-check skips `1cs_v1:`** — Prevents restoring `1cs_v1:` tokens despite working swap routes.
+- [x] **TOPUP action** — Idle USDC ≥$2.00 reinvested into best position below tier max.
+- [x] **OB threshold raised: 85→92 + score guard** — `p.rsi > 92 && p.score < 7`. Prevents selling top-tier winners (sc≥7) for short-term overbought. ZEC (sc=8, RSI=87) no longer triggers churn.
+- [x] **Sell-to-raise equality fix** — `candidate.sc > p.score` → `candidate.sc >= p.score`. Allows buying equal-scored candidates (e.g., KAITO sc=4 when ZEC sc=4).
+- [x] **CG price caching** — 60s TTL cache for `fetchCGData`. Survives CoinGecko rate limits without blind runs.
 
 ## Pending Improvements
 
 ### 1. RSI Coverage
-
-Still missing RSI for many tokens due to:
-- CoinGecko rate limits (~20 calls/min with 5s sleep is safe but still marginal with 15+ tokens)
-- Only held tokens + top 15 are fetched (line 594)
-- wNEAR explicitly excluded by `CG_IDS[s] !== 'near'` filter
-
-**Fix ideas:**
-- Remove `CG_IDS[s] !== 'near'` filter — NEAR OHLC is valid for wNEAR price
-- Prefer held tokens first, then limit to top 10 tradeable candidates (not all top 15)
-- Add CG ID for `NearKat` (already done), keep checking for new route-inventory tokens
+- Only held tokens + top 15 are fetched — still missing RSI for many tradeable candidates
+- wNEAR excluded by `CG_IDS[s] !== 'near'` filter (NEAR OHLC valid for wNEAR price)
+- CG rate limits still hit when building RSI for 15+ tokens (5s sleep each)
 
 ### 2. Portfolio Display / Balance Fidelity
-
 - `mt_batch_balance_of` with `optimistic` finality lags ~10-20 min behind on-chain state
-- In-memory `bals` updates at trade sites help but don't survive restarts
-- `1cs_v1:` tokens remain permanently invisible — blocked from trading but still unrecoverable if somehow acquired
+- In-memory `bals` updates don't survive restarts
+- `1cs_v1:` tokens remain permanently invisible
 
-### 3. Agent Flip-Flopping (Ping-Pong)
+### 3. Cooldown Gate Check
+- `ok` is `const` — computed once at startup. If recovery trades during the run and calls `markTrade()`, main execution still proceeds. Fix: make `ok` a `let`.
 
-The raisedSyms 30-min cooldown helps, but two deeper issues remain:
+### 4. Route Inventory Refresh
+- Currently tests 3 unknown tokens per cycle. Should also re-check held positions that previously failed (BRETT, EVAA).
 
-- **Rotation trigger uses wrong buy target:** The decision reason names the trigger candidate (e.g., KAITO→BTC(OMNI)), but execution independently picks the first buyable target (e.g., XAUT). Fixed the reason string at line 690.
-- **Rotation sell can undermine recent buys:** If the agent rotates into XAUT, then 30 min later sells XAUT to buy something else, the original rotation was pointless. A minimum hold period (e.g., 1 hour before a rotated-into position can be sold) would prevent this.
+### 5. RaisedSyms blocks re-buy of recently sold positions
+- After OB sell of ZEC, raisedSyms 30-min cooldown blocked re-buy in some cases. In others, the re-buy happened despite raisedSyms check (not in the BUY path). The OB threshold fix (92+score guard) should prevent this scenario entirely — better to not sell than to sell and block re-buy.
 
-### 4. Cooldown Gate Check
-
-The `ok` (cooldown) variable at line 485 is `const` — computed once at startup. If recovery trades during the run and calls `markTrade()`, the main execution still proceeds because `ok` was evaluated before recovery. Fix: make `ok` a `let` and re-check after recovery.
-
-### 5. CG Price Caching
-
-CoinGecko rate limits crash the agent (`RATE_LIMITED`). Cache CG prices with a 60s TTL to avoid redundant calls during the same cycle.
-
-### 6. Route Inventory Refresh
-
-Currently tests 3 unknown tokens per cycle to discover new routes. Should also refresh routes for held positions that previously failed (BRETT, EVAA, AAVE, Ondo ETFs).
+### 6. Top-up when position count < MAX_POSITIONS and USDC low
+- Currently TOPUP only fires when `nonStablePositions.length >= MAX_POSITIONS`. With open slots and idle USDC below MIN_POSITION_VALUE, no action taken. Should consider topping up existing positions even with slots open.

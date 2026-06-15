@@ -196,14 +196,26 @@ async function fetchFG() {
   } catch(e) { return { v: 50, t: '?' }; }
 }
 
+const CG_CACHE_TTL = 60 * 1000;
+let cgCache = { data: null, ts: 0 };
+
 async function fetchCGData(ids) {
+  const now = Date.now();
+  if (cgCache.data && now - cgCache.ts < CG_CACHE_TTL) {
+    return cgCache.data;
+  }
   if (!ids.length) return {};
   try {
     const r = await httpGet(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`);
     log('CG prices:', Object.keys(r).join(','));
+    cgCache = { data: r, ts: now };
     return r;
   } catch(e) {
     log('CG price err:', e.message);
+    if (cgCache.data) {
+      log('  Using cached CG prices');
+      return cgCache.data;
+    }
     return {};
   }
 }
@@ -680,6 +692,9 @@ async function main() {
   // exclude USDC from total for decision purposes (it's the stable)
   let nonStablePositions = pricedPositions.filter(p => p.sym !== 'USDC' && p.value >= MIN_TRADE);
   let usdcBal = pricedPositions.find(p => p.sym === 'USDC');
+  // Exclude wNEAR (convertible to native gas) from allocation math; intents NEAR stays tradeable
+  const wNEARpos = pricedPositions.find(p => p.sym === 'wNEAR');
+  const investableTotal = totalValue - (wNEARpos ? wNEARpos.value : 0);
 
   // Track when each position was acquired (prevents flip-flopping)
   let holdStart = {};
@@ -734,7 +749,7 @@ async function main() {
   } else if (nonStablePositions.length > 0) {
     // Check each existing position for weakness first
     for (const p of nonStablePositions) {
-      if (p.rsi !== undefined && p.rsi > 85) { action = 'SELL'; reason = `${p.sym} OB RSI=${p.rsi.toFixed(0)}`; break; }
+      if (p.rsi !== undefined && p.rsi > 92 && p.score < 7) { action = 'SELL'; reason = `${p.sym} OB RSI=${p.rsi.toFixed(0)} sc=${p.score}`; break; }
       // Junk sell: exit positions that fall below sc=4 (only when CG data is fresh)
       if (hasRealScores && p.score < 4) { action = 'SELL'; reason = `${p.sym} junk sc=${p.score}`; break; }
     }
@@ -766,7 +781,7 @@ async function main() {
     } else if (candidate && PORTFOLIO.find(p => p.sym === candidate.sym)) {
       // Check if selling a holding could cover the USDC gap
       const gap = MIN_POSITION_VALUE - usdcForBuy;
-      const canSell = nonStablePositions.some(p => p.value >= gap && p.value >= MIN_TRADE && candidate.sc > (p.score || 0));
+      const canSell = nonStablePositions.some(p => p.value >= gap && p.value >= MIN_TRADE && candidate.sc >= (p.score || 0));
       if (canSell) {
         action = 'BUY'; reason = `Buy ${candidate.sym} (sc=${candidate.sc}) #${nonStablePositions.length + 1}/${MAX_POSITIONS} (sell to raise USDC)`;
       } else {
@@ -798,7 +813,7 @@ async function main() {
     const usdcForTopup = usdcBal?.human || 0;
     if (usdcForTopup >= MIN_POSITION_VALUE) {
       const sortedPos = [...nonStablePositions].sort((a, b) => (b.score || 0) - (a.score || 0));
-      const grandTotalT = totalValue + nearBal * (assets['wNEAR']?.p || 0);
+      const grandTotalT = investableTotal;
       for (let i = 0; i < sortedPos.length; i++) {
         const pos = sortedPos[i];
         const pct = tierPct(i, nonStablePositions.length);
@@ -893,7 +908,7 @@ async function main() {
             if (best.sym === p.sym || best.sym === 'wNEAR' || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || !routeInv.has(best.sym)) continue;
             if (heldSyms.has(best.sym)) {
               const curVal = nonStablePositions.find(x => x.sym === best.sym)?.value || 0;
-              const grandTotal = totalValue + nearBal * (assets['wNEAR']?.p || 0);
+              const grandTotal = investableTotal;
               const sorted = [...nonStablePositions].sort((a, b) => (b.score || 0) - (a.score || 0));
               const rankIdx = sorted.findIndex(x => x.sym === best.sym);
               const maxPct = tierPct(rankIdx, nonStablePositions.length);
@@ -934,7 +949,7 @@ async function main() {
               saveCostBasis(costBasis);
               const target = PORTFOLIO.find(x => x.sym === buyBest.sym);
               if (target && usdcBal.human >= MIN_POSITION_VALUE) {
-                const grandTotal = totalValue + nearBal * (assets['wNEAR']?.p || 0);
+                const grandTotal = investableTotal;
                 let buyUsd = Math.max(MIN_POSITION_VALUE, Math.min(usdcBal.human, grandTotal * rebalTier));
                 const amt2 = Math.floor(buyUsd * 1e6);
                 if (amt2 >= Math.floor(MIN_POSITION_VALUE * 1e6)) {
@@ -985,7 +1000,7 @@ async function main() {
           if (best.sym === worst.sym) continue;
           if (heldSyms.has(best.sym)) {
             const curVal = nonStablePositions.find(p => p.sym === best.sym)?.value || 0;
-            const grandTotal = totalValue + nearBal * (assets['wNEAR']?.p || 0);
+            const grandTotal = investableTotal;
             const sorted = [...nonStablePositions].sort((a, b) => (b.score || 0) - (a.score || 0));
             const rankIdx = sorted.findIndex(p => p.sym === best.sym);
             const maxPct = tierPct(rankIdx, nonStablePositions.length);
@@ -1027,7 +1042,7 @@ async function main() {
             delete holdStart[worst.sym];
             const target = PORTFOLIO.find(p => p.sym === buyBest.sym);
             if (target && usdcBal.human >= MIN_POSITION_VALUE) {
-              const grandTotal = totalValue + nearBal * (assets['wNEAR']?.p || 0);
+              const grandTotal = investableTotal;
               let buyUsd = Math.max(MIN_POSITION_VALUE, Math.min(usdcBal.human, grandTotal * worstTier));
               const amt2 = Math.floor(buyUsd * 1e6);
               if (amt2 >= Math.floor(MIN_POSITION_VALUE * 1e6)) {
@@ -1066,7 +1081,7 @@ async function main() {
       let soldSyms = new Set();
       if ((!usdcBal || usdcBal.human < MIN_POSITION_VALUE) && nonStablePositions.length > 0) {
         const slotIdxR = Math.min(nonStablePositions.length, 2);
-        const grandTotalR = totalValue + nearBal * (assets['wNEAR']?.p || 0);
+        const grandTotalR = investableTotal;
         const targetBuyUsd = Math.max(MIN_POSITION_VALUE, grandTotalR * tierPct(slotIdxR, nonStablePositions.length + 1));
         const shortfall = Math.max(0, targetBuyUsd - (usdcBal?.human || 0));
         const sellCandidates = [...nonStablePositions].filter(p => !raisedSyms[p.sym]).sort((a, b) => {
@@ -1151,7 +1166,7 @@ async function main() {
         if (!target) continue;
         if (!usdcBal || usdcBal.human < MIN_POSITION_VALUE) continue;
         const slotIdx = Math.min(nonStablePositions.length, 2);
-        const grandTotal = totalValue + nearBal * (assets['wNEAR']?.p || 0);
+        const grandTotal = investableTotal;
         let buyUsd = Math.max(MIN_POSITION_VALUE, Math.min(usdcBal.human, grandTotal * tierPct(slotIdx, nonStablePositions.length + 1)));
         const amt = Math.floor(buyUsd * 1e6);
         if (amt < Math.floor(MIN_POSITION_VALUE * 1e6)) break;
@@ -1190,7 +1205,7 @@ async function main() {
       const target = PORTFOLIO.find(p => p.sym === topupSym);
       const pos = nonStablePositions.find(p => p.sym === topupSym);
       if (target && pos && usdcBal?.human >= MIN_POSITION_VALUE) {
-        const grandTotal = totalValue + nearBal * (assets['wNEAR']?.p || 0);
+        const grandTotal = investableTotal;
         const sortedPos = [...nonStablePositions].sort((a, b) => (b.score || 0) - (a.score || 0));
         const rank = sortedPos.findIndex(p => p.sym === topupSym);
         const maxVal = grandTotal * tierPct(rank, nonStablePositions.length);
