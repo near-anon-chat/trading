@@ -6073,3 +6073,252 @@ Node.js v18.19.1
 [2026-06-15T07:45:06.836Z] F&G: 20/100 Extreme Fear
 [2026-06-15T07:45:07.027Z] 1Click: 123 token prices
 [2026-06-15T07:45:07.214Z] CG prices: aave,ab-group,abstract-bridged-usdt-abstract,adi-token,akash-network,aleo,algorand,ankr,apecoin,aptos,arbitrum,arbitrum-bridged-wbtc-arbitrum-one,arbitrum-bridged-weth-arbitrum-nova,aster-2,astherus-usdf,audius,aurora-near,avalanche-2,balancer,based-brett,based-mog-coin,based-turbo,basesafe,basic-attention-token,beam-bridged-usdc-beam,berachain-bera,binancecoin,bitcoin,bitcoin-cash,black-dragon,blur,book-of-meme,bridged-maga-wormhole,cardano,chainlink,chiliz,coinbase-wrapped-btc,coinbet-finance,compound-governance-token,convex-finance,cosmos,cow,crosscurve-btc,curve-dao-token,dai,dash,decentraland,dogecoin,dogwifcoin,enjincoin,ethereum,ethereum-classic,evaa-protocol,fantom,fetch-ai,filecoin,flow,frax,frax-share,gala,gauntlet-usdc-prime,gmx,gnosis,hapi,helium,hemi-bitcoin,holotoken,immutable-x,infinex-2,intellex,internet-computer,iostoken,iotex,jambo-2,kaito,katana-bridged-pol-katana,kyber-network-crystal,lido-dao,litecoin,loud,lydia-coin,maker,matic-network,melania-meme,meta-pool,mina-protocol,monad,monerium-eur-money,monerium-gbp-emoney,moonwell-flagship-usdc-morpho-vault,moveapp,near,nearkat,npro,ocean-protocol,okb,ontology,optimism,pancakeswap-token,pepe,plasma,polkadot,publicai,render-token,rhea-2,ripple,shiba-inu,shitzu,singularitynet,solana,spark-usdc,spell-token,spx6900,staked-near,stargate-bridged-usdt0,starknet,steakhouse-usdc,stellar,sui,sushi,sweatcoin,tether-gold,the-graph,the-open-network,the-sandbox,theta-fuel,theta-token,thorchain,thor-wallet,tron,uniswap,usd1,usdcx,vechain,venice-token,xdai,yearn-finance,zcash,zilliqa
+[2026-06-15T07:46:21.465Z] Top 5:
+[2026-06-15T07:46:21.466Z]   ZEC: sc=8 $493.3200 15.8% RS--
+[2026-06-15T07:46:21.466Z]   wNEAR: sc=7 $2.3900 13.8% RS--
+[2026-06-15T07:46:21.466Z]   NEAR: sc=7 $2.3900 13.8% RS--
+[2026-06-15T07:46:21.466Z]   ADA: sc=6 $0.1806 5.5% RSI=65
+[2026-06-15T07:46:21.467Z]   ETH: sc=5 $1717.1400 2.6% RSI=75
+[2026-06-15T07:46:26.134Z] NEAR: 1.467
+[2026-06-15T07:46:26.134Z]   ETH: 0.001599
+[2026-06-15T07:46:26.134Z]   USDC: 4.104777
+[2026-06-15T07:46:26.134Z]   MON: 0.004831
+[2026-06-15T07:46:26.134Z]   ADA: 15.083371
+[2026-06-15T07:46:26.134Z]   INX: 0.021400
+[2026-06-15T07:46:26.135Z]   NEAR: 3.655082
+[2026-06-15T07:46:27.729Z]   BTC(OMNI): flap penalty applied (sc 5 → 4)
+[2026-06-15T07:46:27.734Z] Decision: TOPUP — Top up NEAR (sc=7) $2.25 room to 60%
+[2026-06-15T07:46:27.734Z] Executing...
+[2026-06-15T07:46:28.143Z] Top up NEAR $2.25 (room to $10.99)...
+[2026-06-15T07:46:28.698Z]   Spread: 0.00%
+[2026-06-15T07:46:28.699Z]   Swap USDC→NEAR addr=89ad5f686f2e2ce1...
+[2026-06-15T07:46:30.120Z]   Intent: 6CRhZMeFxguJioQh...
+[2026-06-15T07:46:35.244Z]   SETTLED
+[2026-06-15T07:46:53.199Z]   ✅ 0.941761774138423419 NEAR
+[2026-06-15T07:46:53.200Z]   Cost: $2.25 @ $2.3899/ea [spread 0.00%]
+[2026-06-15T07:46:53.203Z] ── Portfolio ──
+[2026-06-15T07:46:53.203Z]   ETH: 0.001599 × $1717.1400 = $2.75 ($-0.00, -0.1%) [buy: 0.03% spread, $0.0007 fee]
+[2026-06-15T07:46:53.203Z]   USDC: 1.85 × $1.0000 = $1.85
+[2026-06-15T07:46:53.203Z]   MON: 0.004831 × $0.0223 = $0.00
+[2026-06-15T07:46:53.203Z]   ADA: 15.083371 × $0.1806 = $2.72 ($-0.01, -0.3%) [buy: 0.24% spread, $0.0066 fee]
+[2026-06-15T07:46:53.203Z]   INX: 0.021400 × $0.0081 = $0.00
+[2026-06-15T07:46:53.203Z]   NEAR: 4.597 × $2.3900 = $10.99 (+$0.06, +0.6%) [buy: 0.56% spread, $0.0479 fee]
+[2026-06-15T07:46:53.203Z]   NEAR: 1.467 × $2.39 = $3.51
+[2026-06-15T07:46:53.204Z]   Total: $21.82 | Δprev: +0.04 (+0.17%) | Δstart: +2.46 (+12.69%) | Fees: $0.31 | Perf: $2.76
+[2026-06-15T07:46:53.204Z] ── ─────── ──
+[2026-06-15T07:46:53.204Z] === DONE ===
+[2026-06-15T07:50:01.339Z] 
+[2026-06-15T07:50:01.341Z] === AGENT RUN ===
+[2026-06-15T07:50:01.342Z] Full mode: swap execution enabled
+[2026-06-15T07:50:01.342Z] Cooldown active
+[2026-06-15T07:50:01.343Z] Route inventory: 74 tradable (cached)
+[2026-06-15T07:50:07.748Z] F&G: 20/100 Extreme Fear
+[2026-06-15T07:50:07.957Z] 1Click: 123 token prices
+[2026-06-15T07:50:08.178Z] CG prices: aave,ab-group,abstract-bridged-usdt-abstract,adi-token,akash-network,aleo,algorand,ankr,apecoin,aptos,arbitrum,arbitrum-bridged-wbtc-arbitrum-one,arbitrum-bridged-weth-arbitrum-nova,aster-2,astherus-usdf,audius,aurora-near,avalanche-2,balancer,based-brett,based-mog-coin,based-turbo,basesafe,basic-attention-token,beam-bridged-usdc-beam,berachain-bera,binancecoin,bitcoin,bitcoin-cash,black-dragon,blur,book-of-meme,bridged-maga-wormhole,cardano,chainlink,chiliz,coinbase-wrapped-btc,coinbet-finance,compound-governance-token,convex-finance,cosmos,cow,crosscurve-btc,curve-dao-token,dai,dash,decentraland,dogecoin,dogwifcoin,enjincoin,ethereum,ethereum-classic,evaa-protocol,fantom,fetch-ai,filecoin,flow,frax,frax-share,gala,gauntlet-usdc-prime,gmx,gnosis,hapi,helium,hemi-bitcoin,holotoken,immutable-x,infinex-2,intellex,internet-computer,iostoken,iotex,jambo-2,kaito,katana-bridged-pol-katana,kyber-network-crystal,lido-dao,litecoin,loud,lydia-coin,maker,matic-network,melania-meme,meta-pool,mina-protocol,monad,monerium-eur-money,monerium-gbp-emoney,moonwell-flagship-usdc-morpho-vault,moveapp,near,nearkat,npro,ocean-protocol,okb,ontology,optimism,pancakeswap-token,pepe,plasma,polkadot,publicai,render-token,rhea-2,ripple,shiba-inu,shitzu,singularitynet,solana,spark-usdc,spell-token,spx6900,staked-near,stargate-bridged-usdt0,starknet,steakhouse-usdc,stellar,sui,sushi,sweatcoin,tether-gold,the-graph,the-open-network,the-sandbox,theta-fuel,theta-token,thorchain,thor-wallet,tron,uniswap,usd1,usdcx,vechain,venice-token,xdai,yearn-finance,zcash,zilliqa
+[2026-06-15T07:51:22.746Z] Top 5:
+[2026-06-15T07:51:22.747Z]   ZEC: sc=8 $495.1600 16.2% RS--
+[2026-06-15T07:51:22.747Z]   wNEAR: sc=7 $2.3900 13.7% RS--
+[2026-06-15T07:51:22.747Z]   NEAR: sc=7 $2.3800 13.7% RS--
+[2026-06-15T07:51:22.748Z]   ADA: sc=6 $0.1805 5.4% RSI=65
+[2026-06-15T07:51:22.748Z]   ETH: sc=5 $1716.8600 2.5% RSI=75
+[2026-06-15T07:51:32.140Z] NEAR: 1.467
+[2026-06-15T07:51:32.141Z]   ETH: 0.001599
+[2026-06-15T07:51:32.141Z]   USDC: 1.854016
+[2026-06-15T07:51:32.141Z]   MON: 0.004831
+[2026-06-15T07:51:32.141Z]   ADA: 15.083371
+[2026-06-15T07:51:32.141Z]   INX: 0.021400
+[2026-06-15T07:51:32.141Z]   NEAR: 4.596844
+[2026-06-15T07:51:33.484Z]   BTC(OMNI): flap penalty applied (sc 4 → 3)
+[2026-06-15T07:51:33.485Z] Decision: HOLD — At cap 3/3 (worst=ETH sc=5) | available: ZEC(sc=8), wNEAR(sc=7), NEAR(sc=7)
+[2026-06-15T07:51:33.488Z] ── Portfolio ──
+[2026-06-15T07:51:33.488Z]   ETH: 0.001599 × $1716.8600 = $2.74 ($-0.00, -0.1%) [buy: 0.03% spread, $0.0007 fee]
+[2026-06-15T07:51:33.488Z]   USDC: 1.85 × $1.0000 = $1.85
+[2026-06-15T07:51:33.488Z]   MON: 0.004831 × $0.0223 = $0.00
+[2026-06-15T07:51:33.488Z]   ADA: 15.083371 × $0.1805 = $2.72 ($-0.01, -0.4%) [buy: 0.24% spread, $0.0066 fee]
+[2026-06-15T07:51:33.489Z]   INX: 0.021400 × $0.0081 = $0.00
+[2026-06-15T07:51:33.489Z]   NEAR: 4.597 × $2.3800 = $10.94 (+$0.02, +0.2%) [buy: 0.56% spread, $0.0479 fee]
+[2026-06-15T07:51:33.489Z]   NEAR: 1.467 × $2.39 = $3.51
+[2026-06-15T07:51:33.489Z]   Total: $21.77 | Δprev: -0.05 (-0.22%) | Δstart: +2.41 (+12.44%) | Fees: $0.31 | Perf: $2.72
+[2026-06-15T07:51:33.489Z] ── ─────── ──
+[2026-06-15T07:51:33.489Z] === DONE ===
+[2026-06-15T07:55:01.627Z] 
+[2026-06-15T07:55:01.630Z] === AGENT RUN ===
+[2026-06-15T07:55:01.630Z] Full mode: swap execution enabled
+[2026-06-15T07:55:01.631Z] Route inventory: 74 tradable (cached)
+[2026-06-15T07:55:07.374Z] F&G: 20/100 Extreme Fear
+[2026-06-15T07:55:07.569Z] 1Click: 123 token prices
+[2026-06-15T07:55:07.766Z] CG prices: aave,ab-group,abstract-bridged-usdt-abstract,adi-token,akash-network,aleo,algorand,ankr,apecoin,aptos,arbitrum,arbitrum-bridged-wbtc-arbitrum-one,arbitrum-bridged-weth-arbitrum-nova,aster-2,astherus-usdf,audius,aurora-near,avalanche-2,balancer,based-brett,based-mog-coin,based-turbo,basesafe,basic-attention-token,beam-bridged-usdc-beam,berachain-bera,binancecoin,bitcoin,bitcoin-cash,black-dragon,blur,book-of-meme,bridged-maga-wormhole,cardano,chainlink,chiliz,coinbase-wrapped-btc,coinbet-finance,compound-governance-token,convex-finance,cosmos,cow,crosscurve-btc,curve-dao-token,dai,dash,decentraland,dogecoin,dogwifcoin,enjincoin,ethereum,ethereum-classic,evaa-protocol,fantom,fetch-ai,filecoin,flow,frax,frax-share,gala,gauntlet-usdc-prime,gmx,gnosis,hapi,helium,hemi-bitcoin,holotoken,immutable-x,infinex-2,intellex,internet-computer,iostoken,iotex,jambo-2,kaito,katana-bridged-pol-katana,kyber-network-crystal,lido-dao,litecoin,loud,lydia-coin,maker,matic-network,melania-meme,meta-pool,mina-protocol,monad,monerium-eur-money,monerium-gbp-emoney,moonwell-flagship-usdc-morpho-vault,moveapp,near,nearkat,npro,ocean-protocol,okb,ontology,optimism,pancakeswap-token,pepe,plasma,polkadot,publicai,render-token,rhea-2,ripple,shiba-inu,shitzu,singularitynet,solana,spark-usdc,spell-token,spx6900,staked-near,stargate-bridged-usdt0,starknet,steakhouse-usdc,stellar,sui,sushi,sweatcoin,tether-gold,the-graph,the-open-network,the-sandbox,theta-fuel,theta-token,thorchain,thor-wallet,tron,uniswap,usd1,usdcx,vechain,venice-token,xdai,yearn-finance,zcash,zilliqa
+[2026-06-15T07:56:22.266Z] Top 5:
+[2026-06-15T07:56:22.267Z]   ZEC: sc=8 $494.0100 15.6% RS--
+[2026-06-15T07:56:22.268Z]   wNEAR: sc=7 $2.3800 13.5% RS--
+[2026-06-15T07:56:22.268Z]   NEAR: sc=7 $2.3800 13.5% RS--
+[2026-06-15T07:56:22.268Z]   ADA: sc=6 $0.1803 5.4% RSI=65
+[2026-06-15T07:56:22.268Z]   ETH: sc=5 $1717.3200 2.5% RSI=75
+[2026-06-15T07:56:27.191Z] NEAR: 1.467
+[2026-06-15T07:56:27.192Z]   ETH: 0.001599
+[2026-06-15T07:56:27.192Z]   USDC: 1.854016
+[2026-06-15T07:56:27.192Z]   MON: 0.004831
+[2026-06-15T07:56:27.192Z]   ADA: 15.083371
+[2026-06-15T07:56:27.192Z]   INX: 0.021400
+[2026-06-15T07:56:27.192Z]   NEAR: 4.596844
+[2026-06-15T07:56:28.522Z]   BTC(OMNI): flap penalty applied (sc 5 → 4)
+[2026-06-15T07:56:28.522Z] Decision: ROTATE — ETH weakest (sc=5), rotate to best buyable
+[2026-06-15T07:56:28.523Z] Executing...
+[2026-06-15T07:56:29.323Z] Rotate ETH→USDC...
+[2026-06-15T07:56:29.761Z]   Spread: 0.13%
+[2026-06-15T07:56:29.762Z]   Swap ETH→USDC addr=4f531085be12becf...
+[2026-06-15T07:56:30.489Z]   Intent: 251uLVUfgrBAeYDV...
+[2026-06-15T07:56:35.854Z]   SETTLED
+[2026-06-15T07:56:49.859Z]   ✅ 2.741996 USDC
+[2026-06-15T07:56:49.860Z]   ✅ Sold ETH → 2.741996 USDC ($-0.01, -0.2%) [spread 0.13%, fee $0.0037]
+[2026-06-15T07:56:49.861Z] Rotate into ZEC $2.74 (#3/3)...
+[2026-06-15T07:56:50.524Z]   Spread: 0.00%
+[2026-06-15T07:56:50.524Z]   Swap USDC→ZEC addr=0f7322caf0b0f7de...
+[2026-06-15T07:56:51.229Z]   Intent: 9koSYBW1yLMoV6rg...
+[2026-06-15T07:56:56.373Z]   SETTLED
+[2026-06-15T07:57:08.845Z]   ✅ 0.005548 ZEC
+[2026-06-15T07:57:08.846Z]   ✅ Rotate complete: ETH→ZEC
+[2026-06-15T07:57:08.851Z] ── Portfolio ──
+[2026-06-15T07:57:08.851Z]   USDC: 1.86 × $1.0000 = $1.86
+[2026-06-15T07:57:08.851Z]   ZEC: 0.005548 × $494.0100 = $2.74 (+$0.00, +0.1%)
+[2026-06-15T07:57:08.851Z]   MON: 0.004831 × $0.0222 = $0.00
+[2026-06-15T07:57:08.851Z]   ADA: 15.083371 × $0.1803 = $2.72 ($-0.01, -0.5%) [buy: 0.24% spread, $0.0066 fee]
+[2026-06-15T07:57:08.851Z]   INX: 0.021400 × $0.0081 = $0.00
+[2026-06-15T07:57:08.851Z]   NEAR: 4.597 × $2.3800 = $10.94 (+$0.02, +0.2%) [buy: 0.56% spread, $0.0479 fee]
+[2026-06-15T07:57:08.851Z]   NEAR: 1.467 × $2.38 = $3.49
+[2026-06-15T07:57:08.852Z]   Total: $21.75 | Δprev: -0.02 (-0.08%) | Δstart: +2.39 (+12.35%) | Fees: $0.31 | Perf: $2.70
+[2026-06-15T07:57:08.852Z] ── ─────── ──
+[2026-06-15T07:57:08.852Z] === DONE ===
+[2026-06-15T08:00:01.988Z] 
+[2026-06-15T08:00:01.991Z] === AGENT RUN ===
+[2026-06-15T08:00:01.991Z] Full mode: swap execution enabled
+[2026-06-15T08:00:01.991Z] Cooldown active
+[2026-06-15T08:00:01.992Z] Route inventory: 74 tradable (cached)
+[2026-06-15T08:00:08.275Z] F&G: 20/100 Extreme Fear
+[2026-06-15T08:00:08.468Z] 1Click: 123 token prices
+[2026-06-15T08:00:08.643Z] CG prices: aave,ab-group,abstract-bridged-usdt-abstract,adi-token,akash-network,aleo,algorand,ankr,apecoin,aptos,arbitrum,arbitrum-bridged-wbtc-arbitrum-one,arbitrum-bridged-weth-arbitrum-nova,aster-2,astherus-usdf,audius,aurora-near,avalanche-2,balancer,based-brett,based-mog-coin,based-turbo,basesafe,basic-attention-token,beam-bridged-usdc-beam,berachain-bera,binancecoin,bitcoin,bitcoin-cash,black-dragon,blur,book-of-meme,bridged-maga-wormhole,cardano,chainlink,chiliz,coinbase-wrapped-btc,coinbet-finance,compound-governance-token,convex-finance,cosmos,cow,crosscurve-btc,curve-dao-token,dai,dash,decentraland,dogecoin,dogwifcoin,enjincoin,ethereum,ethereum-classic,evaa-protocol,fantom,fetch-ai,filecoin,flow,frax,frax-share,gala,gauntlet-usdc-prime,gmx,gnosis,hapi,helium,hemi-bitcoin,holotoken,immutable-x,infinex-2,intellex,internet-computer,iostoken,iotex,jambo-2,kaito,katana-bridged-pol-katana,kyber-network-crystal,lido-dao,litecoin,loud,lydia-coin,maker,matic-network,melania-meme,meta-pool,mina-protocol,monad,monerium-eur-money,monerium-gbp-emoney,moonwell-flagship-usdc-morpho-vault,moveapp,near,nearkat,npro,ocean-protocol,okb,ontology,optimism,pancakeswap-token,pepe,plasma,polkadot,publicai,render-token,rhea-2,ripple,shiba-inu,shitzu,singularitynet,solana,spark-usdc,spell-token,spx6900,staked-near,stargate-bridged-usdt0,starknet,steakhouse-usdc,stellar,sui,sushi,sweatcoin,tether-gold,the-graph,the-open-network,the-sandbox,theta-fuel,theta-token,thorchain,thor-wallet,tron,uniswap,usd1,usdcx,vechain,venice-token,xdai,yearn-finance,zcash,zilliqa
+[2026-06-15T08:01:22.990Z] Top 5:
+[2026-06-15T08:01:22.990Z]   ZEC: sc=8 $492.8400 15.3% RSI=87
+[2026-06-15T08:01:22.991Z]   wNEAR: sc=7 $2.3800 13.1% RS--
+[2026-06-15T08:01:22.991Z]   NEAR: sc=7 $2.3800 13.1% RS--
+[2026-06-15T08:01:22.991Z]   ADA: sc=6 $0.1803 5.2% RSI=65
+[2026-06-15T08:01:22.991Z]   ETH: sc=5 $1716.1600 2.5% RS--
+[2026-06-15T08:01:27.594Z] NEAR: 1.467
+[2026-06-15T08:01:27.594Z]   USDC: 1.856984
+[2026-06-15T08:01:27.594Z]   ZEC: 0.005548
+[2026-06-15T08:01:27.595Z]   MON: 0.004831
+[2026-06-15T08:01:27.595Z]   ADA: 15.083371
+[2026-06-15T08:01:27.595Z]   INX: 0.021400
+[2026-06-15T08:01:27.595Z]   NEAR: 4.596844
+[2026-06-15T08:01:29.188Z]   BTC(OMNI): flap penalty applied (sc 4 → 3)
+[2026-06-15T08:01:29.190Z] Decision: HOLD — At cap 3/3 (worst=ADA sc=6) | available: ZEC(sc=8), wNEAR(sc=7), NEAR(sc=7)
+[2026-06-15T08:01:29.194Z] ── Portfolio ──
+[2026-06-15T08:01:29.195Z]   USDC: 1.86 × $1.0000 = $1.86
+[2026-06-15T08:01:29.195Z]   ZEC: 0.005548 × $492.8400 = $2.73 ($-0.00, -0.2%)
+[2026-06-15T08:01:29.195Z]   MON: 0.004831 × $0.0222 = $0.00
+[2026-06-15T08:01:29.195Z]   ADA: 15.083371 × $0.1803 = $2.72 ($-0.01, -0.5%) [buy: 0.24% spread, $0.0066 fee]
+[2026-06-15T08:01:29.195Z]   INX: 0.021400 × $0.0081 = $0.00
+[2026-06-15T08:01:29.195Z]   NEAR: 4.597 × $2.3800 = $10.94 (+$0.02, +0.2%) [buy: 0.56% spread, $0.0479 fee]
+[2026-06-15T08:01:29.195Z]   NEAR: 1.467 × $2.38 = $3.49
+[2026-06-15T08:01:29.196Z]   Total: $21.74 | Δprev: -0.01 (-0.03%) | Δstart: +2.38 (+12.31%) | Fees: $0.31 | Perf: $2.69
+[2026-06-15T08:01:29.196Z] ── ─────── ──
+[2026-06-15T08:01:29.196Z] === DONE ===
+[2026-06-15T08:05:01.334Z] 
+[2026-06-15T08:05:01.336Z] === AGENT RUN ===
+[2026-06-15T08:05:01.337Z] Full mode: swap execution enabled
+[2026-06-15T08:05:01.338Z] Route inventory: 74 tradable (cached)
+[2026-06-15T08:05:07.194Z] F&G: 20/100 Extreme Fear
+[2026-06-15T08:05:07.410Z] 1Click: 123 token prices
+[2026-06-15T08:05:07.558Z] CG prices: aave,ab-group,abstract-bridged-usdt-abstract,adi-token,akash-network,aleo,algorand,ankr,apecoin,aptos,arbitrum,arbitrum-bridged-wbtc-arbitrum-one,arbitrum-bridged-weth-arbitrum-nova,aster-2,astherus-usdf,audius,aurora-near,avalanche-2,balancer,based-brett,based-mog-coin,based-turbo,basesafe,basic-attention-token,beam-bridged-usdc-beam,berachain-bera,binancecoin,bitcoin,bitcoin-cash,black-dragon,blur,book-of-meme,bridged-maga-wormhole,cardano,chainlink,chiliz,coinbase-wrapped-btc,coinbet-finance,compound-governance-token,convex-finance,cosmos,cow,crosscurve-btc,curve-dao-token,dai,dash,decentraland,dogecoin,dogwifcoin,enjincoin,ethereum,ethereum-classic,evaa-protocol,fantom,fetch-ai,filecoin,flow,frax,frax-share,gala,gauntlet-usdc-prime,gmx,gnosis,hapi,helium,hemi-bitcoin,holotoken,immutable-x,infinex-2,intellex,internet-computer,iostoken,iotex,jambo-2,kaito,katana-bridged-pol-katana,kyber-network-crystal,lido-dao,litecoin,loud,lydia-coin,maker,matic-network,melania-meme,meta-pool,mina-protocol,monad,monerium-eur-money,monerium-gbp-emoney,moonwell-flagship-usdc-morpho-vault,moveapp,near,nearkat,npro,ocean-protocol,okb,ontology,optimism,pancakeswap-token,pepe,plasma,polkadot,publicai,render-token,rhea-2,ripple,shiba-inu,shitzu,singularitynet,solana,spark-usdc,spell-token,spx6900,staked-near,stargate-bridged-usdt0,starknet,steakhouse-usdc,stellar,sui,sushi,sweatcoin,tether-gold,the-graph,the-open-network,the-sandbox,theta-fuel,theta-token,thorchain,thor-wallet,tron,uniswap,usd1,usdcx,vechain,venice-token,xdai,yearn-finance,zcash,zilliqa
+[2026-06-15T08:06:21.435Z] Top 5:
+[2026-06-15T08:06:21.436Z]   ZEC: sc=8 $493.1900 15.6% RSI=87
+[2026-06-15T08:06:21.436Z]   wNEAR: sc=7 $2.3600 12.9% RS--
+[2026-06-15T08:06:21.436Z]   NEAR: sc=7 $2.3700 12.9% RS--
+[2026-06-15T08:06:21.436Z]   ADA: sc=6 $0.1802 5.5% RSI=65
+[2026-06-15T08:06:21.436Z]   ETH: sc=5 $1717.2100 2.5% RS--
+[2026-06-15T08:06:26.276Z] NEAR: 1.467
+[2026-06-15T08:06:26.276Z]   USDC: 1.856984
+[2026-06-15T08:06:26.276Z]   ZEC: 0.005548
+[2026-06-15T08:06:26.276Z]   MON: 0.004831
+[2026-06-15T08:06:26.276Z]   ADA: 15.083371
+[2026-06-15T08:06:26.276Z]   INX: 0.021400
+[2026-06-15T08:06:26.277Z]   NEAR: 4.596844
+[2026-06-15T08:06:27.686Z]   BTC(OMNI): flap penalty applied (sc 4 → 3)
+[2026-06-15T08:06:27.687Z] Decision: HOLD — At cap 3/3 (worst=ADA sc=6) | available: ZEC(sc=8), wNEAR(sc=7), NEAR(sc=7)
+[2026-06-15T08:06:27.691Z] ── Portfolio ──
+[2026-06-15T08:06:27.691Z]   USDC: 1.86 × $1.0000 = $1.86
+[2026-06-15T08:06:27.691Z]   ZEC: 0.005548 × $493.1900 = $2.74 ($-0.00, -0.1%)
+[2026-06-15T08:06:27.691Z]   MON: 0.004831 × $0.0222 = $0.00
+[2026-06-15T08:06:27.691Z]   ADA: 15.083371 × $0.1802 = $2.72 ($-0.01, -0.5%) [buy: 0.24% spread, $0.0066 fee]
+[2026-06-15T08:06:27.692Z]   INX: 0.021400 × $0.0081 = $0.00
+[2026-06-15T08:06:27.692Z]   NEAR: 4.597 × $2.3700 = $10.89 ($-0.03, -0.3%) [buy: 0.56% spread, $0.0479 fee]
+[2026-06-15T08:06:27.692Z]   NEAR: 1.467 × $2.36 = $3.46
+[2026-06-15T08:06:27.692Z]   Total: $21.67 | Δprev: -0.07 (-0.34%) | Δstart: +2.31 (+11.93%) | Fees: $0.31 | Perf: $2.62
+[2026-06-15T08:06:27.692Z] ── ─────── ──
+[2026-06-15T08:06:27.692Z] === DONE ===
+[2026-06-15T08:10:01.837Z] 
+[2026-06-15T08:10:01.839Z] === AGENT RUN ===
+[2026-06-15T08:10:01.840Z] Full mode: swap execution enabled
+[2026-06-15T08:10:01.841Z] Route inventory: 74 tradable (cached)
+[2026-06-15T08:10:07.806Z] F&G: 20/100 Extreme Fear
+[2026-06-15T08:10:08.009Z] 1Click: 123 token prices
+[2026-06-15T08:10:08.214Z] CG prices: aave,ab-group,abstract-bridged-usdt-abstract,adi-token,akash-network,aleo,algorand,ankr,apecoin,aptos,arbitrum,arbitrum-bridged-wbtc-arbitrum-one,arbitrum-bridged-weth-arbitrum-nova,aster-2,astherus-usdf,audius,aurora-near,avalanche-2,balancer,based-brett,based-mog-coin,based-turbo,basesafe,basic-attention-token,beam-bridged-usdc-beam,berachain-bera,binancecoin,bitcoin,bitcoin-cash,black-dragon,blur,book-of-meme,bridged-maga-wormhole,cardano,chainlink,chiliz,coinbase-wrapped-btc,coinbet-finance,compound-governance-token,convex-finance,cosmos,cow,crosscurve-btc,curve-dao-token,dai,dash,decentraland,dogecoin,dogwifcoin,enjincoin,ethereum,ethereum-classic,evaa-protocol,fantom,fetch-ai,filecoin,flow,frax,frax-share,gala,gauntlet-usdc-prime,gmx,gnosis,hapi,helium,hemi-bitcoin,holotoken,immutable-x,infinex-2,intellex,internet-computer,iostoken,iotex,jambo-2,kaito,katana-bridged-pol-katana,kyber-network-crystal,lido-dao,litecoin,loud,lydia-coin,maker,matic-network,melania-meme,meta-pool,mina-protocol,monad,monerium-eur-money,monerium-gbp-emoney,moonwell-flagship-usdc-morpho-vault,moveapp,near,nearkat,npro,ocean-protocol,okb,ontology,optimism,pancakeswap-token,pepe,plasma,polkadot,publicai,render-token,rhea-2,ripple,shiba-inu,shitzu,singularitynet,solana,spark-usdc,spell-token,spx6900,staked-near,stargate-bridged-usdt0,starknet,steakhouse-usdc,stellar,sui,sushi,sweatcoin,tether-gold,the-graph,the-open-network,the-sandbox,theta-fuel,theta-token,thorchain,thor-wallet,tron,uniswap,usd1,usdcx,vechain,venice-token,xdai,yearn-finance,zcash,zilliqa
+[2026-06-15T08:11:22.613Z] Top 5:
+[2026-06-15T08:11:22.614Z]   ZEC: sc=8 $493.7400 15.6% RSI=87
+[2026-06-15T08:11:22.614Z]   wNEAR: sc=7 $2.3700 13.2% RS--
+[2026-06-15T08:11:22.614Z]   NEAR: sc=7 $2.3700 13.2% RS--
+[2026-06-15T08:11:22.614Z]   ADA: sc=6 $0.1807 5.7% RSI=65
+[2026-06-15T08:11:22.615Z]   ETH: sc=5 $1718.4600 2.5% RS--
+[2026-06-15T08:11:27.186Z] NEAR: 1.467
+[2026-06-15T08:11:27.186Z]   USDC: 1.856984
+[2026-06-15T08:11:27.186Z]   ZEC: 0.005548
+[2026-06-15T08:11:27.186Z]   MON: 0.004831
+[2026-06-15T08:11:27.186Z]   ADA: 15.083371
+[2026-06-15T08:11:27.186Z]   INX: 0.021400
+[2026-06-15T08:11:27.186Z]   NEAR: 4.596844
+[2026-06-15T08:11:28.749Z]   BTC(OMNI): flap penalty applied (sc 4 → 3)
+[2026-06-15T08:11:28.750Z] Decision: HOLD — At cap 3/3 (worst=ADA sc=6) | available: ZEC(sc=8), wNEAR(sc=7), NEAR(sc=7)
+[2026-06-15T08:11:28.753Z] ── Portfolio ──
+[2026-06-15T08:11:28.753Z]   USDC: 1.86 × $1.0000 = $1.86
+[2026-06-15T08:11:28.753Z]   ZEC: 0.005548 × $493.7400 = $2.74 (+$0.00, +0.0%)
+[2026-06-15T08:11:28.753Z]   MON: 0.004831 × $0.0223 = $0.00
+[2026-06-15T08:11:28.753Z]   ADA: 15.083371 × $0.1807 = $2.73 ($-0.01, -0.2%) [buy: 0.24% spread, $0.0066 fee]
+[2026-06-15T08:11:28.753Z]   INX: 0.021400 × $0.0081 = $0.00
+[2026-06-15T08:11:28.753Z]   NEAR: 4.597 × $2.3700 = $10.89 ($-0.03, -0.3%) [buy: 0.56% spread, $0.0479 fee]
+[2026-06-15T08:11:28.753Z]   NEAR: 1.467 × $2.37 = $3.48
+[2026-06-15T08:11:28.753Z]   Total: $21.69 | Δprev: +0.03 (+0.12%) | Δstart: +2.33 (+12.06%) | Fees: $0.31 | Perf: $2.65
+[2026-06-15T08:11:28.754Z] ── ─────── ──
+[2026-06-15T08:11:28.754Z] === DONE ===
+[2026-06-15T08:15:01.890Z] 
+[2026-06-15T08:15:01.892Z] === AGENT RUN ===
+[2026-06-15T08:15:01.893Z] Full mode: swap execution enabled
+[2026-06-15T08:15:01.893Z] Route inventory: 74 tradable (cached)
+[2026-06-15T08:15:08.049Z] F&G: 20/100 Extreme Fear
+[2026-06-15T08:15:08.240Z] 1Click: 123 token prices
+[2026-06-15T08:15:08.357Z] CG prices: aave,ab-group,abstract-bridged-usdt-abstract,adi-token,akash-network,aleo,algorand,ankr,apecoin,aptos,arbitrum,arbitrum-bridged-wbtc-arbitrum-one,arbitrum-bridged-weth-arbitrum-nova,aster-2,astherus-usdf,audius,aurora-near,avalanche-2,balancer,based-brett,based-mog-coin,based-turbo,basesafe,basic-attention-token,beam-bridged-usdc-beam,berachain-bera,binancecoin,bitcoin,bitcoin-cash,black-dragon,blur,book-of-meme,bridged-maga-wormhole,cardano,chainlink,chiliz,coinbase-wrapped-btc,coinbet-finance,compound-governance-token,convex-finance,cosmos,cow,crosscurve-btc,curve-dao-token,dai,dash,decentraland,dogecoin,dogwifcoin,enjincoin,ethereum,ethereum-classic,evaa-protocol,fantom,fetch-ai,filecoin,flow,frax,frax-share,gala,gauntlet-usdc-prime,gmx,gnosis,hapi,helium,hemi-bitcoin,holotoken,immutable-x,infinex-2,intellex,internet-computer,iostoken,iotex,jambo-2,kaito,katana-bridged-pol-katana,kyber-network-crystal,lido-dao,litecoin,loud,lydia-coin,maker,matic-network,melania-meme,meta-pool,mina-protocol,monad,monerium-eur-money,monerium-gbp-emoney,moonwell-flagship-usdc-morpho-vault,moveapp,near,nearkat,npro,ocean-protocol,okb,ontology,optimism,pancakeswap-token,pepe,plasma,polkadot,publicai,render-token,rhea-2,ripple,shiba-inu,shitzu,singularitynet,solana,spark-usdc,spell-token,spx6900,staked-near,stargate-bridged-usdt0,starknet,steakhouse-usdc,stellar,sui,sushi,sweatcoin,tether-gold,the-graph,the-open-network,the-sandbox,theta-fuel,theta-token,thorchain,thor-wallet,tron,uniswap,usd1,usdcx,vechain,venice-token,xdai,yearn-finance,zcash,zilliqa
+[2026-06-15T08:16:23.740Z] Top 5:
+[2026-06-15T08:16:23.740Z]   ZEC: sc=8 $494.2100 15.9% RSI=91
+[2026-06-15T08:16:23.741Z]   wNEAR: sc=7 $2.3900 13.1% RS--
+[2026-06-15T08:16:23.741Z]   NEAR: sc=7 $2.3900 13.1% RS--
+[2026-06-15T08:16:23.741Z]   ADA: sc=6 $0.1807 5.6% RSI=65
+[2026-06-15T08:16:23.741Z]   ETH: sc=5 $1718.1900 2.5% RS--
+[2026-06-15T08:16:28.405Z] NEAR: 1.467
+[2026-06-15T08:16:28.405Z]   USDC: 1.856984
+[2026-06-15T08:16:28.405Z]   ZEC: 0.005548
+[2026-06-15T08:16:28.405Z]   MON: 0.004831
+[2026-06-15T08:16:28.405Z]   ADA: 15.083371
+[2026-06-15T08:16:28.405Z]   INX: 0.021400
+[2026-06-15T08:16:28.405Z]   NEAR: 4.596844
+[2026-06-15T08:16:29.709Z]   BTC(OMNI): flap penalty applied (sc 4 → 3)
+[2026-06-15T08:16:29.711Z] Decision: HOLD — At cap 3/3 (worst=ADA sc=6) | available: ZEC(sc=8), wNEAR(sc=7), NEAR(sc=7)
+[2026-06-15T08:16:29.713Z] ── Portfolio ──
+[2026-06-15T08:16:29.714Z]   USDC: 1.86 × $1.0000 = $1.86
+[2026-06-15T08:16:29.714Z]   ZEC: 0.005548 × $494.2100 = $2.74 (+$0.00, +0.1%)
+[2026-06-15T08:16:29.714Z]   MON: 0.004831 × $0.0223 = $0.00
+[2026-06-15T08:16:29.714Z]   ADA: 15.083371 × $0.1807 = $2.73 ($-0.01, -0.3%) [buy: 0.24% spread, $0.0066 fee]
+[2026-06-15T08:16:29.714Z]   INX: 0.021400 × $0.0081 = $0.00
+[2026-06-15T08:16:29.714Z]   NEAR: 4.597 × $2.3900 = $10.99 (+$0.06, +0.6%) [buy: 0.56% spread, $0.0479 fee]
+[2026-06-15T08:16:29.714Z]   NEAR: 1.467 × $2.39 = $3.51
+[2026-06-15T08:16:29.714Z]   Total: $21.82 | Δprev: +0.12 (+0.57%) | Δstart: +2.46 (+12.69%) | Fees: $0.31 | Perf: $2.77
+[2026-06-15T08:16:29.714Z] ── ─────── ──
+[2026-06-15T08:16:29.714Z] === DONE ===
