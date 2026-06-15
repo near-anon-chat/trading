@@ -692,9 +692,8 @@ async function main() {
   // exclude USDC from total for decision purposes (it's the stable)
   let nonStablePositions = pricedPositions.filter(p => p.sym !== 'USDC' && p.value >= MIN_TRADE);
   let usdcBal = pricedPositions.find(p => p.sym === 'USDC');
-  // Exclude wNEAR (convertible to native gas) from allocation math; intents NEAR stays tradeable
-  const wNEARpos = pricedPositions.find(p => p.sym === 'wNEAR');
-  const investableTotal = totalValue - (wNEARpos ? wNEARpos.value : 0);
+  // wNEAR in intents is a tradeable position — include in allocation math
+  const investableTotal = totalValue;
 
   // Track when each position was acquired (prevents flip-flopping)
   let holdStart = {};
@@ -758,7 +757,7 @@ async function main() {
       const worst = nonStablePositions.reduce((w, p) => p.score < (w?.score ?? Infinity) ? p : w, nonStablePositions[0]);
       const heldTooShort = holdStart[worst.sym] && Date.now() - holdStart[worst.sym] < HOLD_MIN_MS;
       if (heldTooShort) { log(`  ${worst.sym} held < ${HOLD_MIN_MS/60000}min, skip rotate`); }
-      const bestNew = !heldTooShort && ranked.find(a => a.sc >= 3 && a.sym !== 'wNEAR' && (a.r === undefined || a.r < 92) && !failedTokens.has(a.sym) && !nonStablePositions.find(p => p.sym === a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym) && a.sc >= (worst?.score || 0) + 1);
+      const bestNew = !heldTooShort && ranked.find(a => a.sc >= 3 && (a.r === undefined || a.r < 92) && !failedTokens.has(a.sym) && !nonStablePositions.find(p => p.sym === a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym) && a.sc >= (worst?.score || 0) + 1);
       if (bestNew) {
         const slotOpen = nonStablePositions.length < MAX_POSITIONS;
         const usdcForBuy = usdcBal?.human || 0;
@@ -774,7 +773,7 @@ async function main() {
   // If no sell/rotate and room to buy more
   if (action === 'HOLD' && nonStablePositions.length < MAX_POSITIONS) {
     const heldSyms = new Set(nonStablePositions.map(p => p.sym));
-    const candidate = ranked.find(a => a.sc >= 4 && a.sym !== 'wNEAR' && (a.r === undefined || a.r < 92) && !failedTokens.has(a.sym) && !heldSyms.has(a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym));
+    const candidate = ranked.find(a => a.sc >= 4 && (a.r === undefined || a.r < 92) && !failedTokens.has(a.sym) && !heldSyms.has(a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym));
     const usdcForBuy = usdcBal?.human || 0;
     if (candidate && PORTFOLIO.find(p => p.sym === candidate.sym) && usdcForBuy >= MIN_POSITION_VALUE) {
       action = 'BUY'; reason = `Buy ${candidate.sym} (sc=${candidate.sc}) #${nonStablePositions.length + 1}/${MAX_POSITIONS}`;
@@ -795,7 +794,6 @@ async function main() {
       const heldSet = new Set(nonStablePositions.map(p => p.sym));
       const details = ranked.filter(a => a.sc >= 3).slice(0, 5).map(a => {
         const why = [];
-        if (a.sym === 'wNEAR') why.push('wNEAR excluded');
         if (!PORTFOLIO.find(p => p.sym === a.sym)) why.push('not in list');
         if (routeInv.size > 0 && !routeInv.has(a.sym)) why.push('no route');
         if (a.r !== undefined && a.r >= 80) why.push(`RSI=${a.r.toFixed(0)}≥80`);
@@ -905,7 +903,7 @@ async function main() {
           let buyBest = null;
           for (const best of ranked) {
         if (best.sc < 4) break;
-            if (best.sym === p.sym || best.sym === 'wNEAR' || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || !routeInv.has(best.sym)) continue;
+            if (best.sym === p.sym || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || !routeInv.has(best.sym)) continue;
             if (heldSyms.has(best.sym)) {
               const curVal = nonStablePositions.find(x => x.sym === best.sym)?.value || 0;
               const grandTotal = investableTotal;
@@ -996,7 +994,7 @@ async function main() {
         let buyBest = null;
         for (const best of ranked) {
           if (best.sc < 3) break;
-          if (best.sym === 'wNEAR' || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || !routeInv.has(best.sym)) continue;
+          if (failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || !routeInv.has(best.sym)) continue;
           if (best.sym === worst.sym) continue;
           if (heldSyms.has(best.sym)) {
             const curVal = nonStablePositions.find(p => p.sym === best.sym)?.value || 0;
@@ -1084,11 +1082,7 @@ async function main() {
         const grandTotalR = investableTotal;
         const targetBuyUsd = Math.max(MIN_POSITION_VALUE, grandTotalR * tierPct(slotIdxR, nonStablePositions.length + 1));
         const shortfall = Math.max(0, targetBuyUsd - (usdcBal?.human || 0));
-        const sellCandidates = [...nonStablePositions].filter(p => !raisedSyms[p.sym]).sort((a, b) => {
-          if (a.sym === 'wNEAR') return -1;
-          if (b.sym === 'wNEAR') return 1;
-          return (a.score || 999) - (b.score || 999);
-        });
+        const sellCandidates = [...nonStablePositions].filter(p => !raisedSyms[p.sym]).sort((a, b) => (a.score || 999) - (b.score || 999));
         for (const sellP of sellCandidates) {
           if (sellP.value < MIN_TRADE) continue;
           const sellPrice = assets[sellP.sym]?.p || 0;
@@ -1159,7 +1153,7 @@ async function main() {
       const tried = new Set();
       for (const best of ranked) {
         if (best.sc < 3) break;
-        if (tried.has(best.sym) || best.sym === 'wNEAR' || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || !routeInv.has(best.sym)) continue;
+        if (tried.has(best.sym) || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || !routeInv.has(best.sym)) continue;
         if (heldSyms.has(best.sym)) continue;
         tried.add(best.sym);
         const target = PORTFOLIO.find(p => p.sym === best.sym);
