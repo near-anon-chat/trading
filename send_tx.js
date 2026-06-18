@@ -37,7 +37,7 @@ class BorshWriter {
   u128(v) { const b = Buffer.alloc(16); const bn = BigInt(v); b.writeBigUInt64LE(bn & 0xFFFFFFFFFFFFFFFFn, 0); b.writeBigUInt64LE(bn >> 64n, 8); this.write(b); }
   string(s) { const b = Buffer.from(s, 'utf8'); this.u32(b.length); this.write(b); }
   publicKey(pk) { const raw = bs58.decode(pk.split(':')[1]); this.write(Buffer.from([0, ...raw.slice(0, 32)])); }
-  signature(sig) { this.write(Bector.from([0, ...sig])); }
+  signature(sig) { this.write(Buffer.from([0, ...sig])); }
 }
 
 function serializeTransaction(signerId, publicKey, nonce, receiverId, actions, blockHash) {
@@ -46,17 +46,19 @@ function serializeTransaction(signerId, publicKey, nonce, receiverId, actions, b
   w.publicKey(publicKey);
   w.u64(nonce);
   w.string(receiverId);
+  w.write(bs58.decode(blockHash));
   w.u32(actions.length);
   for (const a of actions) {
     if (a.type === 'FunctionCall') { w.u8(2); w.string(a.methodName); const args = Buffer.from(a.args, 'utf8'); w.u32(args.length); w.write(args); w.u64(a.gas); w.u128(a.deposit); }
   }
-  w.write(bs58.decode(blockHash));
   return w.buf;
 }
 
 function serializeSignedTransaction(signerId, publicKeyStr, nonce, receiverId, actions, blockHash, signatureBytes) {
   const innerTx = serializeTransaction(signerId, publicKeyStr, nonce, receiverId, actions, blockHash);
   const w = new BorshWriter();
+  // Inner transaction first
+  w.write(innerTx);
   // ED25519 public key: 0x00 + 32 bytes
   const rawPk = bs58.decode(publicKeyStr.split(':')[1]);
   w.u8(0);
@@ -64,8 +66,6 @@ function serializeSignedTransaction(signerId, publicKeyStr, nonce, receiverId, a
   // ED25519 signature: 0x00 + 64 bytes
   w.u8(0);
   w.write(signatureBytes);
-  // Inner transaction
-  w.write(innerTx);
   return w.buf;
 }
 

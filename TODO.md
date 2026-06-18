@@ -46,3 +46,16 @@
 
 ### 6. Top-up when position count < MAX_POSITIONS and USDC low
 - Currently TOPUP only fires when `nonStablePositions.length >= MAX_POSITIONS`. With open slots and idle USDC below MIN_POSITION_VALUE, no action taken. Should consider topping up existing positions even with slots open.
+
+## Frozen (no action)
+- **Native NEAR (1.467 wallet)** — Gas only, never wrap or trade. Reserved for transaction fees.
+- **4.597 wNEAR rotation** — Awaiting user signal. Pending `tokens.json` fix to point `NEAR` → `nep141:wrap.near` so route check passes.
+
+## Done
+
+- [x] **Junk sell threshold raised sc<4→sc<5** — Assets scoring below 5 are sold as junk (was below 4). Fires only when CG data is fresh.
+- [x] **ROTATE delta raised +1→+2** — Prevents rotating between same-tier assets (sc=7↔sc=8). Only triggers when candidate is 2+ points above the worst position's score.
+- [x] **Sell-to-raise delta raised +0→+2** — Selling a position to raise USDC for a new buy now requires candidate to be at least 2 points better.
+- [x] **wNEAR included as buy target** — All buy-side exclusions (`a.sym !== 'wNEAR'`, `best.sym === 'wNEAR'`, display exclusion) removed.
+- [x] **wNEAR included in investableTotal** — Portfolio allocation math now counts wNEAR value. Previously excluded as "convertible to native gas."
+- [x] **wNEAR bottom-sorting removed** — No longer sorted to last place in sell-to-raise candidates.

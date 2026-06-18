@@ -1,4 +1,5 @@
 const https = require('https');
+const fs = require('fs');
 
 const UA = 'Mozilla/5.0 OpenCode-Trading-Screener/1.0';
 
@@ -34,10 +35,71 @@ const ONDO = {
   AGGon: 'AGG', TLTon: 'TLT', USDon: 'DX-Y.NYB'
 };
 
-const HOLDINGS = {
-  ETH: { amount: 0.007248, buyPrice: 1675, chain: 'near' },
-  XAUT: { amount: 0.001059, buyPrice: 4226, chain: 'eth' },
-};
+function loadRouteInventory() {
+  try {
+    const raw = JSON.parse(fs.readFileSync('/home/jbz/code/trading/.route_inventory.json', 'utf8'));
+    return new Set(raw.tradable);
+  } catch(e) { return new Set(); }
+}
+
+function loadCostBasis() {
+  try {
+    return JSON.parse(fs.readFileSync('/home/jbz/code/trading/.cost_basis.json', 'utf8'));
+  } catch(e) { return {}; }
+}
+
+function loadPortfolioHistory() {
+  try {
+    const hist = JSON.parse(fs.readFileSync('/home/jbz/code/trading/portfolio_history.json', 'utf8'));
+    return hist.length > 0 ? hist[hist.length - 1] : null;
+  } catch(e) { return null; }
+}
+
+function buildHoldings(costBasis, latestSnapshot) {
+  const holdings = {};
+  for (const [sym, cb] of Object.entries(costBasis)) {
+    const pos = latestSnapshot?.pos?.find(p => p.s === sym);
+    holdings[sym] = {
+      amount: pos ? pos.q : cb.qty,
+      buyPrice: cb.cost / cb.qty,
+      chain: 'near'
+    };
+  }
+  return holdings;
+}
+
+function scoreToken(chg, vol, type) {
+  let s = 0;
+  if (chg > 10) s += 5;
+  else if (chg > 5) s += 3;
+  else if (chg > 2) s += 2;
+  else if (chg > 0) s += 1;
+  else if (chg > -5) s -= 1;
+  else s -= 2;
+  if (vol > 5e8) s += 3;
+  else if (vol > 5e7) s += 2;
+  else if (vol > 5e6) s += 1;
+  if (type === 'stock') s += 2;
+  return s;
+}
+
+function computeRSI(closes) {
+  if (closes.length < 15) return null;
+  const gains = [], losses = [];
+  for (let i = 1; i < closes.length; i++) {
+    const diff = closes[i] - closes[i-1];
+    gains.push(diff > 0 ? diff : 0);
+    losses.push(diff < 0 ? -diff : 0);
+  }
+  const last14g = gains.slice(-14);
+  const last14l = losses.slice(-14);
+  const avgG = last14g.reduce((a, b) => a + b, 0) / 14;
+  const avgL = last14l.reduce((a, b) => a + b, 0) / 14;
+  if (avgL === 0 && avgG > 0) return 100;
+  if (avgL === 0 && avgG === 0) return 50;
+  const rs = avgG / avgL;
+  return 100 - (100 / (1 + rs));
+}
 
 async function main() {
   let fg = '?', fgc = '?';
@@ -49,6 +111,9 @@ async function main() {
   } catch(e) {}
   console.log('=== MARKET SENTIMENT ===');
   console.log('Fear & Greed: ' + fg + '/100 (' + fgc + ')\n');
+
+  const routeInv = loadRouteInventory();
+  console.log('Tradable routes: ' + routeInv.size + '\n');
 
   const tokens = require('./tokens.json');
   if (!tokens || !tokens.length) { console.error('Run: fetch fresh tokens from 1Click API'); return; }
@@ -121,58 +186,42 @@ async function main() {
 
   const allResults = [...cryptoResults, ...ondoResults]
     .filter(r => r.price > 1e-8)
-    .map(r => {
-      let s = 0;
-      if (r.change24h > 10) s += 5;
-      else if (r.change24h > 5) s += 3;
-      else if (r.change24h > 2) s += 2;
-      else if (r.change24h > 0) s += 1;
-      else if (r.change24h > -5) s -= 1;
-      else s -= 2;
-      if (r.volume24h > 5e8) s += 3;
-      else if (r.volume24h > 5e7) s += 2;
-      else if (r.volume24h > 5e6) s += 1;
-      if (r.type === 'stock') s += 2;
-      return { ...r, score: s };
-    })
+    .map(r => ({
+      ...r,
+      score: scoreToken(r.change24h, r.volume24h, r.type),
+      tradable: routeInv.has(r.symbol)
+    }))
     .sort((a, b) => b.score - a.score);
 
-  console.log('\n' + '='.repeat(95));
-  console.log('      ALL TRADING OPPORTUNITIES — CRYPTO + ETFs (TA + Sentiment)');
-  console.log('='.repeat(95));
-  console.log('#  Symbol      Price           24h Δ       Volume     Type  Score');
-  console.log('─  ' + '─'.repeat(90));
+  console.log('\n' + '='.repeat(105));
+  console.log('      ALL TRADING OPPORTUNITIES — CRYPTO + ETFs');
+  console.log('='.repeat(105));
+  console.log('#  Symbol      Price           24h Delta     Volume     Type  Score Route');
+  console.log('-  ' + '-'.repeat(100));
 
-  allResults.slice(0, 20).forEach((r, i) => {
+  allResults.slice(0, 25).forEach((r, i) => {
     const ch = r.change24h >= 0 ? '+' : '';
     const vol = r.volume24h >= 1e9 ? (r.volume24h/1e9).toFixed(1)+'B' : r.volume24h >= 1e6 ? (r.volume24h/1e6).toFixed(0)+'M' : (r.volume24h/1e3).toFixed(0)+'K';
-    const typeP = r.type === 'stock' ? '📈ETF' : '  🪙';
+    const typeP = r.type === 'stock' ? 'ETF' : 'CRYPTO';
     const pStr = r.price >= 100 ? r.price.toFixed(2) : r.price >= 1 ? r.price.toFixed(4) : r.price.toFixed(8);
-    console.log((i+1).toString().padStart(2) + '. ' + r.symbol.padEnd(9) + ' $' + pStr.padStart(14) + ' ' + ch + r.change24h.toFixed(2).padStart(7) + '%  ' + vol.padStart(8) + ' ' + typeP + ' ' + r.score.toString().padStart(3));
+    const routeTag = r.tradable ? 'YES' : 'no';
+    console.log((i+1).toString().padStart(2) + '. ' + r.symbol.padEnd(9) + ' $' + pStr.padStart(14) + ' ' + ch + r.change24h.toFixed(2).padStart(7) + '%  ' + vol.padStart(8) + ' ' + typeP.padEnd(7) + ' ' + r.score.toString().padStart(3) + ' ' + routeTag);
   });
 
-  console.log('\n' + '─'.repeat(95));
+  console.log('\n' + '-'.repeat(105));
   console.log('RSI-14 (top 8)');
-  console.log('─'.repeat(95));
+  console.log('-'.repeat(105));
 
   const rsiMap = {};
 
   for (const r of allResults.slice(0, 8)) {
-    if (r._closes && r._closes.length >= 14) {
+    if (r._closes && r._closes.length >= 15) {
       const closes = r._closes.filter(c => c && c > 0).slice(-15);
-      if (closes.length < 14) { continue; }
-      const gains = [], losses = [];
-      for (let i = 1; i < closes.length; i++) {
-        const diff = closes[i] - closes[i-1];
-        gains.push(diff > 0 ? diff : 0); losses.push(diff < 0 ? -diff : 0);
-      }
-      const avgG = gains.slice(-14).reduce((a,b) => a+b, 0) / 14;
-      const avgL = losses.slice(-14).reduce((a,b) => a+b, 0) / 14;
-      let rsi = 50;
-      if (avgL === 0 && avgG > 0) rsi = 100;
-      else if (avgL > 0) { const rs = avgG / avgL; rsi = 100 - (100 / (1 + rs)); }
+      if (closes.length < 15) { continue; }
+      const rsi = computeRSI(closes);
+      if (rsi === null) continue;
       const dir = r.change24h > 0 ? '+' + r.change24h.toFixed(1) + '%' : r.change24h.toFixed(1) + '%';
-      const sig = rsi > 70 ? '⚠️  OVERBOUGHT' : rsi < 30 ? '🟢 OVERSOLD' : '➖ neutral';
+      const sig = rsi > 70 ? 'OVERBOUGHT' : rsi < 30 ? 'OVERSOLD' : 'neutral';
       rsiMap[r.symbol] = rsi;
       console.log(r.symbol.padEnd(9) + ' $' + r.price.toFixed(2).padStart(12) + '  RSI(14): ' + rsi.toFixed(1).padStart(6) + '  ' + dir.padStart(8) + '  ' + sig);
     } else {
@@ -195,32 +244,24 @@ async function main() {
             try { chart = await cg('/api/v3/coins/' + info.id + '/ohlc?days=14&vs_currency=usd'); break; }
             catch(e) { if (e.message === 'RATE_LIMITED' && attempts < 2) { console.log('  CG OHLC rate limited, waiting 60s...'); await sleep(60000); continue; } throw e; }
           }
-          if (!chart || chart.length < 14) { continue; }
+          if (!chart || chart.length < 15) { continue; }
           closes = chart.map(c => c[4]).filter(p => p && p > 0);
-        } catch(e) { if (e.message !== 'RATE_LIMITED') console.log(r.symbol + ' — ' + e.message.slice(0,30)); continue; }
+        } catch(e) { if (e.message !== 'RATE_LIMITED') console.log(r.symbol + ' -- ' + e.message.slice(0,30)); continue; }
         await sleep(3000);
       }
-      if (closes.length < 14) { continue; }
-      const gains = [], losses = [];
-      for (let i = 1; i < closes.length; i++) {
-        const diff = closes[i] - closes[i-1];
-        gains.push(diff > 0 ? diff : 0); losses.push(diff < 0 ? -diff : 0);
-      }
-      const avgG = gains.slice(-14).reduce((a,b) => a+b, 0) / 14;
-      const avgL = losses.slice(-14).reduce((a,b) => a+b, 0) / 14;
-      let rsi = 50;
-      if (avgL === 0 && avgG > 0) rsi = 100;
-      else if (avgL > 0) { const rs = avgG / avgL; rsi = 100 - (100 / (1 + rs)); }
+      if (closes.length < 15) { continue; }
+      const rsi = computeRSI(closes);
+      if (rsi === null) continue;
       const dir = r.change24h > 0 ? '+' + r.change24h.toFixed(1) + '%' : r.change24h.toFixed(1) + '%';
-      const sig = rsi > 70 ? '⚠️  OVERBOUGHT' : rsi < 30 ? '🟢 OVERSOLD' : '➖ neutral';
+      const sig = rsi > 70 ? 'OVERBOUGHT' : rsi < 30 ? 'OVERSOLD' : 'neutral';
       rsiMap[r.symbol] = rsi;
       console.log(r.symbol.padEnd(9) + ' $' + (r.price > 100 ? r.price.toFixed(2) : r.price.toFixed(6)).toString().padStart(12) + '  RSI(14): ' + rsi.toFixed(1).padStart(6) + '  ' + dir.padStart(8) + '  ' + sig);
     }
   }
 
-  console.log('\n' + '─'.repeat(95));
+  console.log('\n' + '-'.repeat(105));
   console.log('  24H SWING CANDIDATES (score>=2, RSI<70, vol>$1M)');
-  console.log('─'.repeat(95));
+  console.log('-'.repeat(105));
 
   const swingCandidates = allResults
     .filter(r => r.score >= 2 && r.price > 0.0001 && r.volume24h > 1_000_000)
@@ -236,7 +277,8 @@ async function main() {
       const rsiStr = rsiMap[r.symbol] !== undefined ? rsiMap[r.symbol].toFixed(1) : '  --';
       const volStr = r.volume24h >= 1e9 ? (r.volume24h/1e9).toFixed(1)+'B' : r.volume24h >= 1e6 ? (r.volume24h/1e6).toFixed(0)+'M' : (r.volume24h/1e3).toFixed(0)+'K';
       const pStr = r.price >= 100 ? r.price.toFixed(2) : r.price >= 1 ? r.price.toFixed(4) : r.price.toFixed(8);
-      console.log('  ' + (i+1).toString().padEnd(2) + r.symbol.padEnd(9) + ' $' + pStr.padStart(14) + '  ' + ch + r.change24h.toFixed(2).padStart(7) + '%  RSI ' + rsiStr.padStart(6) + '  score ' + r.score.toString().padStart(2) + '  vol ' + volStr.padStart(8));
+      const routeTag = r.tradable ? 'YES' : 'no';
+      console.log('  ' + (i+1).toString().padEnd(2) + r.symbol.padEnd(9) + ' $' + pStr.padStart(14) + '  ' + ch + r.change24h.toFixed(2).padStart(7) + '%  RSI ' + rsiStr.padStart(6) + '  score ' + r.score.toString().padStart(2) + '  vol ' + volStr.padStart(8) + '  route:' + routeTag);
     });
   }
 
@@ -244,92 +286,114 @@ async function main() {
   const best3 = allResults.slice(0, 3);
   const topCrypto = allResults.filter(r => r.type === 'crypto').slice(0, 3);
   const topStocks = allResults.filter(r => r.type === 'stock').slice(0, 3);
+  const topTradable = allResults.filter(r => r.tradable).slice(0, 3);
 
-  console.log('\n' + '═'.repeat(95));
+  console.log('\n' + '='.repeat(105));
   console.log('  Fear & Greed: ' + fg + '/100 (' + fgc + ')');
-  if (fgN < 20) console.log('  → Extreme Fear');
-  else if (fgN < 40) console.log('  → Fear');
-  else if (fgN < 60) console.log('  → Neutral');
-  else if (fgN < 80) console.log('  → Greed');
-  else console.log('  → Extreme Greed');
+  if (fgN < 20) console.log('  -> Extreme Fear');
+  else if (fgN < 40) console.log('  -> Fear');
+  else if (fgN < 60) console.log('  -> Neutral');
+  else if (fgN < 80) console.log('  -> Greed');
+  else console.log('  -> Extreme Greed');
   console.log('\n  Top 3 overall:       ' + best3.map(r => r.symbol).join(', '));
   console.log('  Top 3 crypto:        ' + topCrypto.map(r => r.symbol).join(', '));
   console.log('  Top 3 stocks/ETFs:   ' + topStocks.map(r => r.symbol).join(', '));
-  console.log('\n  ⚠️  Not financial advice.');
-  console.log('  ═'.repeat(95));
+  console.log('  Top 3 tradable:      ' + (topTradable.length ? topTradable.map(r => r.symbol).join(', ') : '(none with active routes)'));
+  console.log('\n  Not financial advice.');
+  console.log('  ' + '='.repeat(105));
 
   // === PORTFOLIO CHECK ===
+  const costBasis = loadCostBasis();
+  const latestSnapshot = loadPortfolioHistory();
+  const HOLDINGS = buildHoldings(costBasis, latestSnapshot);
+
   const goldAsset = allResults.find(r => r.symbol === 'GLDon');
   const goldDown = goldAsset && goldAsset.change24h < 0;
   const marketDownCount = allResults.slice(0, 15).filter(r => r.change24h < 0).length;
   const marketRiskOff = fgN < 30 && (goldDown || marketDownCount > 9);
 
-  console.log('\n' + '═'.repeat(95));
+  console.log('\n' + '='.repeat(105));
   console.log('  PORTFOLIO CHECK');
-  console.log('═'.repeat(95));
+  console.log('='.repeat(105));
 
   let anySellSignal = false;
   let totalValue = 0;
 
-  console.log('  ' + 'Holding'.padEnd(9) + '   Amount  ' + '  Price  ' + '    Value   ' + '    P&L     ' + '  P&L $   ' + ' Signal');
-  console.log('  ' + '─'.repeat(70));
+  if (Object.keys(HOLDINGS).length === 0) {
+    console.log('  No current holdings (load .cost_basis.json and portfolio_history.json)');
+  } else {
+    console.log('  ' + 'Holding'.padEnd(9) + '   Amount  ' + '  Price  ' + '    Value   ' + '    P&L     ' + '  P&L $   ' + ' Signal');
+    console.log('  ' + '-'.repeat(70));
 
-  for (const [sym, h] of Object.entries(HOLDINGS)) {
-    const current = allResults.find(r => r.symbol === sym);
-    if (!current) {
-      console.log('  ' + sym.padEnd(9) + ' - price not available');
-      continue;
+    for (const [sym, h] of Object.entries(HOLDINGS)) {
+      const current = allResults.find(r => r.symbol === sym);
+      if (!current) {
+        console.log('  ' + sym.padEnd(9) + ' - price not available');
+        continue;
+      }
+      const value = current.price * h.amount;
+      totalValue += value;
+      const pnlPct = ((current.price - h.buyPrice) / h.buyPrice) * 100;
+      const pnlUsd = (current.price - h.buyPrice) * h.amount;
+      const pnlStr = pnlPct >= 0 ? '+' + pnlPct.toFixed(2) + '%' : pnlPct.toFixed(2) + '%';
+      const valueStr = '$' + value.toFixed(4);
+      const usdStr = pnlUsd >= 0 ? '+$' + pnlUsd.toFixed(4) : '-$' + Math.abs(pnlUsd).toFixed(4);
+      const amtStr = h.amount >= 1 ? h.amount.toFixed(2) : h.amount.toFixed(4);
+
+      let signal = 'HOLD';
+      let reason = '';
+
+      if (marketRiskOff) {
+        signal = 'SELL';
+        reason = 'risk-off: broad market selloff, gold down, extreme fear';
+      } else if (pnlPct < -10) {
+        signal = 'SELL';
+        reason = 'stop loss: ' + pnlPct.toFixed(1) + '%';
+      } else if (pnlPct < 0 && current.score < -2) {
+        signal = 'SELL';
+        reason = 'negative momentum (score=' + current.score + ')';
+      } else if (pnlPct < -5) {
+        signal = 'WATCH';
+        reason = 'approaching stop loss at -10%';
+      }
+
+      if (signal !== 'HOLD') anySellSignal = true;
+
+      const sigColors = signal === 'SELL' ? 'SELL' : signal === 'WATCH' ? 'WATCH' : 'HOLD';
+      console.log('  ' + sym.padEnd(9) + amtStr.padStart(8) + ' $' + current.price.toFixed(4).padStart(7) + ' ' + valueStr.padStart(9) + ' ' + pnlStr.padStart(9) + ' ' + usdStr.padStart(8) + '  ' + sigColors.padEnd(5) + ' ' + reason);
     }
-    const value = current.price * h.amount;
-    totalValue += value;
-    const pnlPct = ((current.price - h.buyPrice) / h.buyPrice) * 100;
-    const pnlUsd = (current.price - h.buyPrice) * h.amount;
-    const pnlStr = pnlPct >= 0 ? '+' + pnlPct.toFixed(2) + '%' : pnlPct.toFixed(2) + '%';
-    const valueStr = '$' + value.toFixed(4);
-    const usdStr = pnlUsd >= 0 ? '+$' + pnlUsd.toFixed(4) : '-$' + Math.abs(pnlUsd).toFixed(4);
-    const amtStr = h.amount >= 1 ? h.amount.toFixed(2) : h.amount.toFixed(4);
 
-    let signal = 'HOLD';
-    let reason = '';
+    console.log('  ' + '-'.repeat(70));
+    console.log('  ' + 'TOTAL'.padEnd(9) + ' '.repeat(8) + ' '.repeat(9) + ' $' + totalValue.toFixed(4).padStart(7) + ' '.repeat(9) + ' '.repeat(9));
 
-    if (marketRiskOff) {
-      signal = 'SELL';
-      reason = 'risk-off: broad market selloff, gold down, extreme fear';
-    } else if (pnlPct < -10) {
-      signal = 'SELL';
-      reason = 'stop loss: ' + pnlPct.toFixed(1) + '%';
-    } else if (pnlPct < 0 && current.score < -2) {
-      signal = 'SELL';
-      reason = 'negative momentum (score=' + current.score + ')';
-    } else if (pnlPct < -5) {
-      signal = 'WATCH';
-      reason = 'approaching stop loss at -10%';
-    }
+    if (!anySellSignal) {
+      console.log('\n  === SWAP TARGETS ===');
 
-    if (signal !== 'HOLD') anySellSignal = true;
-
-    const sigTag = signal === 'SELL' ? '\u{1F534} SELL' : signal === 'WATCH' ? '\u{1F7E1} WATCH' : '\u{1F7E2} HOLD';
-    console.log('  ' + sym.padEnd(9) + amtStr.padStart(8) + ' $' + current.price.toFixed(4).padStart(7) + ' ' + valueStr.padStart(9) + ' ' + pnlStr.padStart(9) + ' ' + usdStr.padStart(8) + '  ' + sigTag + ' ' + reason);
-  }
-
-  console.log('  ' + '─'.repeat(70));
-  console.log('  ' + 'TOTAL'.padEnd(9) + ' '.repeat(8) + ' '.repeat(9) + ' $' + totalValue.toFixed(4).padStart(7) + ' '.repeat(9) + ' '.repeat(9));
-
-  if (!anySellSignal) {
-    console.log('\n  === SWAP TARGETS ===');
-
-    if (marketRiskOff) {
-      console.log('  Market in risk-off mode - swap to USDT (stable)');
-      console.log('  Suggested: SELL holdings - Buy USDC or USDT on NEAR');
-      console.log('  USDC asset: nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1');
-    } else {
-      const topPicks = allResults.filter(r => r.score > 5).slice(0, 3);
-      console.log('  Top swap targets (score > 5):');
-      topPicks.forEach(r => {
-        const ch = r.change24h >= 0 ? '+' : '';
-        console.log('    ' + r.symbol.padEnd(9) + ' score=' + r.score + '  24h: ' + ch + r.change24h.toFixed(2) + '%  $' + r.price.toFixed(4));
-      });
-      console.log('\n  \u26A0\uFE0F  Review recommendations before executing any swap.');
+      if (marketRiskOff) {
+        console.log('  Market in risk-off mode - swap to USDC (stable)');
+        console.log('  Suggested: SELL holdings - Buy USDC on NEAR');
+        console.log('  USDC asset: nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1');
+      } else {
+        const topPicks = allResults.filter(r => r.score > 5 && r.tradable).slice(0, 3);
+        if (topPicks.length) {
+          console.log('  Top tradable swap targets (score > 5):');
+          topPicks.forEach(r => {
+            const ch = r.change24h >= 0 ? '+' : '';
+            console.log('    ' + r.symbol.padEnd(9) + ' score=' + r.score + '  24h: ' + ch + r.change24h.toFixed(2) + '%  $' + r.price.toFixed(4));
+          });
+        } else {
+          const topAll = allResults.filter(r => r.score > 5).slice(0, 3);
+          if (topAll.length) {
+            console.log('  Top scoring targets (no active route):');
+            topAll.forEach(r => {
+              const ch = r.change24h >= 0 ? '+' : '';
+              console.log('    ' + r.symbol.padEnd(9) + ' score=' + r.score + '  24h: ' + ch + r.change24h.toFixed(2) + '%  $' + r.price.toFixed(4) + '  (no route)');
+            });
+          } else {
+            console.log('  No candidates with score > 5 found.');
+          }
+        }
+      }
     }
   }
 }
