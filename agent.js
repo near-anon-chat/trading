@@ -169,8 +169,9 @@ async function httpGet(url, hdrs = {}) {
   for (let i = 0; i < 3; i++) {
     try { return await _httpGet(url, hdrs); }
     catch(e) {
-      if (i < 2 && (e.message?.includes('EAI_AGAIN') || e.message?.includes('ECONNRESET') || e.message?.includes('ETIMEDOUT'))) {
-        await sleep(2000); continue;
+      if (i < 2) {
+        if (e.message?.includes('RATE_LIMITED')) { await sleep(5000); continue; }
+        if (e.message?.includes('EAI_AGAIN') || e.message?.includes('ECONNRESET') || e.message?.includes('ETIMEDOUT')) { await sleep(2000); continue; }
       }
       throw e;
     }
@@ -263,7 +264,8 @@ async function fetchOHLC(id) {
     const closes = Array.isArray(d) ? d.map(c => c[4]).filter(p => p > 0) : null;
     if (closes) {
       try {
-        const cache = JSON.parse(fs.readFileSync(OHLC_CACHE_FILE, 'utf8'));
+        let cache = {};
+        try { cache = JSON.parse(fs.readFileSync(OHLC_CACHE_FILE, 'utf8')); } catch(e) {}
         cache[cacheKey] = closes;
         fs.writeFileSync(OHLC_CACHE_FILE, JSON.stringify(cache));
       } catch(e) {}
@@ -515,7 +517,16 @@ function saveRaisedSyms(syms) {
 }
 
 function loadFlapSyms() {
-  try { return JSON.parse(fs.readFileSync(FLAP_FILE, 'utf8')); } catch(e) { return {}; }
+  try {
+    const syms = JSON.parse(fs.readFileSync(FLAP_FILE, 'utf8'));
+    const now = Date.now();
+    let changed = false;
+    for (const [k, v] of Object.entries(syms)) {
+      if (now - v > FLAP_COOLDOWN_MS) { delete syms[k]; changed = true; }
+    }
+    if (changed) try { fs.writeFileSync(FLAP_FILE, JSON.stringify(syms)); } catch(e) {}
+    return syms;
+  } catch(e) { return {}; }
 }
 
 function loadCostBasis() {
@@ -634,6 +645,9 @@ async function main() {
   const ok = canTrade();
   if (!ok) log('Cooldown active');
 
+  // Fix 1: ensure OHLC cache file exists (populated by first cycle → 0 API calls thereafter)
+  try { if (!fs.existsSync(OHLC_CACHE_FILE)) fs.writeFileSync(OHLC_CACHE_FILE, '{}'); } catch(e) {}
+
   // Route inventory — cache of which tokens have active 1Click swap routes
   let routeInv = canExec ? loadRouteInventoryCache() : null;
   if (canExec && !routeInv) {
@@ -720,7 +734,7 @@ async function main() {
     const h = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
     if (Array.isArray(h) && h.length > 0) {
       failedTokens = new Set(h[h.length - 1].failedTokens || []);
-      lastPos = (h[h.length - 1].pos || []).map(p => p.s);
+      lastPos = (h[h.length - 1].pos || []).filter(p => p.v >= 0.50).map(p => p.s);
     }
   } catch(e) {}
   // Ondo ETFs (symbols ending in "on") have no swap routes on 1Click — block all dynamically
@@ -771,14 +785,18 @@ async function main() {
   // RSI — held tokens (from history) + top 15 scorers
   const sorted = Object.entries(assets).sort((a, b) => b[1].sc - a[1].sc);
   const top15 = sorted.slice(0, 15).map(e => e[0]);
-  const rsiFor = [...new Set([...lastPos, ...top15])].filter(s => CG_IDS[s] && CG_IDS[s] !== 'near');
 
   const rsis = {};
-  for (const sym of rsiFor) {
+  // Sequential fetch: held (for OB detection) + top 5 crypto scorers (buy candidates)
+  // ETFs score high on stock market days but have no CG IDs — skip them
+  const cryptoScorers = sorted.filter(([sym]) => CG_IDS[sym] && CG_IDS[sym] !== 'near' && sym !== 'USDC' && routeInv.has(sym)).map(e => e[0]);
+  const rsiPriority = [...new Set([...lastPos, ...cryptoScorers.slice(0, 5)])];
+  for (let i = 0; i < rsiPriority.length; i++) {
+    const sym = rsiPriority[i];
     const id = CG_IDS[sym];
     const { closes, fromCache } = await fetchOHLC(id);
     if (closes) rsis[sym] = rsi(closes);
-    if (!fromCache) await sleep(5000);
+    if (!fromCache) await sleep(i === rsiPriority.length - 1 ? 0 : 3000);
   }
   // ETF RSI from stored data
   for (const [sym, d] of Object.entries(etfData)) {
@@ -900,7 +918,7 @@ async function main() {
     for (const p of nonStablePositions) {
       if (hasRealScores && p.score >= 5) {
         if (junkTimers[p.sym]) { delete junkTimers[p.sym]; log(`  ${p.sym} recovered (sc=${p.score}), cleared junk timer`); }
-      } else if (hasRealScores && p.score < 6) {
+      } else if (hasRealScores && p.score < 5) {
         if (!junkTimers[p.sym]) { junkTimers[p.sym] = Date.now(); log(`  ${p.sym} junk timer started (sc=${p.score})`); }
       }
       // Overbought timer: start when RSI > 92 & sc < 7, clear when condition no longer met
@@ -917,14 +935,14 @@ async function main() {
     for (const p of nonStablePositions) {
       if (p.rsi !== undefined && p.rsi > 92 && p.score < 7 && Date.now() - (obTimers[p.sym] || 0) >= OB_HOLD_MS) { action = 'SELL'; reason = `${p.sym} OB RSI=${p.rsi.toFixed(0)} sc=${p.score}`; break; }
       // Junk sell: exit positions below sc=5 only after hold timer expires
-      if (hasRealScores && p.score < 6 && Date.now() - (junkTimers[p.sym] || 0) >= JUNK_HOLD_MS) { action = 'SELL'; reason = `${p.sym} junk sc=${p.score}`; break; }
+      if (hasRealScores && p.score < 5 && Date.now() - (junkTimers[p.sym] || 0) >= JUNK_HOLD_MS) { action = 'SELL'; reason = `${p.sym} junk sc=${p.score}`; break; }
     }
     // Check rotation if no immediate sell
     if (action === 'HOLD') {
       const worst = nonStablePositions.reduce((w, p) => p.score < (w?.score ?? Infinity) ? p : w, nonStablePositions[0]);
       const heldTooShort = holdStart[worst.sym] && Date.now() - holdStart[worst.sym] < HOLD_MIN_MS;
       if (heldTooShort) { log(`  ${worst.sym} held < ${HOLD_MIN_MS/60000}min, skip rotate`); }
-      const bestNew = !heldTooShort && ranked.find(a => a.sc >= 5 && (a.r === undefined || a.r < 92) && !failedTokens.has(a.sym) && !nonStablePositions.find(p => p.sym === a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym) && a.sc >= (worst?.score || 0) + 2);
+      const bestNew = !heldTooShort && ranked.find(a => a.sc >= 6 && (a.r === undefined || a.r < 92) && !failedTokens.has(a.sym) && !nonStablePositions.find(p => p.sym === a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym) && a.sc >= (worst?.score || 0) + 2);
       if (bestNew) {
         const slotOpen = nonStablePositions.length < MAX_POSITIONS;
         const usdcForBuy = usdcBal?.human || 0;
@@ -940,7 +958,7 @@ async function main() {
   // If no sell/rotate and room to buy more
   if (action === 'HOLD' && nonStablePositions.length < MAX_POSITIONS) {
     const heldSyms = new Set(nonStablePositions.map(p => p.sym));
-    const candidate = ranked.find(a => a.sc >= 5 && (a.r === undefined || a.r < 92) && !failedTokens.has(a.sym) && !heldSyms.has(a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym));
+    const candidate = ranked.find(a => a.sc >= 6 && (a.r === undefined || a.r < 92) && !failedTokens.has(a.sym) && !heldSyms.has(a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym));
     const usdcForBuy = usdcBal?.human || 0;
     if (candidate && PORTFOLIO.find(p => p.sym === candidate.sym) && usdcForBuy >= MIN_POSITION_VALUE - 0.50) {
       action = 'BUY'; reason = `Buy ${candidate.sym} (sc=${candidate.sc}) #${nonStablePositions.length + 1}/${MAX_POSITIONS}`;
