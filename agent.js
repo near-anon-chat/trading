@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const bs58 = require('bs58').default;
 const nacl = require('tweetnacl');
+const deepseek = require('./lib/deepseek.js');
 
 const PROJECT = __dirname;
 const LOG_FILE = path.join(PROJECT, 'agent.log');
@@ -32,8 +33,12 @@ const OHLC_CACHE_FILE = path.join(PROJECT, '.ohlc_cache.json');
 const NO_ROUTE_LOG = path.join(PROJECT, 'no_route.log');
 const FAIL_COOLDOWN_MS = 60 * 60 * 1000;   // wait 1h before re-checking a failed token
 const FAIL_COOLDOWN_FILE = path.join(PROJECT, '.fail_cooldown.json');
+const RESEARCH_FILE = path.join(PROJECT, '.research_log.json');
+const ROUTE_HEALTH_FILE = path.join(PROJECT, '.route_health.json');
+const PEAK_FILE = path.join(PROJECT, '.peak_tracker.json');
 const FROZEN_FILE = path.join(PROJECT, '.frozen.json');
 const DEPOSITS_FILE = path.join(PROJECT, 'deposits.json');
+const DEPOSIT_HISTORY_FILE = path.join(PROJECT, '.deposit_history.json');
 const BAL_CACHE_FILE = path.join(PROJECT, '.bal_cache.json');
 const RPC_ENDPOINTS = [
   'https://rpc.mainnet.near.org',
@@ -225,7 +230,7 @@ async function fetchCGData(ids) {
   }
   if (!ids.length) return {};
   try {
-    const r = await httpGet(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`);
+    const r = await httpGet(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true&include_market_cap=true`);
     log('CG prices:', Object.keys(r).join(','));
     cgCache = { data: r, ts: now };
     return r;
@@ -274,6 +279,27 @@ async function fetchOHLC(id) {
   } catch(e) { return { closes: null, fromCache: false }; }
 }
 
+async function fetchIntraday(id) {
+  const cacheKey = `intra_${id}_${new Date().toISOString().slice(0, 10)}`;
+  try {
+    const cache = JSON.parse(fs.readFileSync(OHLC_CACHE_FILE, 'utf8'));
+    if (cache[cacheKey]) return { prices: cache[cacheKey], fromCache: true };
+  } catch(e) {}
+  try {
+    const d = await httpGet(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=1`);
+    const prices = Array.isArray(d?.prices) ? d.prices.map(p => p[1]).filter(p => p > 0) : null;
+    if (prices && prices.length >= 36) {
+      try {
+        let cache = {};
+        try { cache = JSON.parse(fs.readFileSync(OHLC_CACHE_FILE, 'utf8')); } catch(e) {}
+        cache[cacheKey] = prices;
+        fs.writeFileSync(OHLC_CACHE_FILE, JSON.stringify(cache));
+      } catch(e) {}
+    }
+    return { prices, fromCache: false };
+  } catch(e) { return { prices: null, fromCache: false }; }
+}
+
 function rsi(closes) {
   if (!closes || closes.length < 14) return null;
   const g = [], l = [];
@@ -282,6 +308,59 @@ function rsi(closes) {
   const al = l.slice(-14).reduce((a, b) => a + b, 0) / 14;
   if (al === 0) return ag > 0 ? 100 : 50;
   return 100 - 100 / (1 + ag / al);
+}
+
+function intradayMom(prices) {
+  if (!prices || prices.length < 36) return null;
+  const last12 = prices.slice(-12);
+  const prev24 = prices.slice(-36, -12);
+  const recent = last12.reduce((s, p) => s + p, 0) / last12.length;
+  const prev = prev24.reduce((s, p) => s + p, 0) / prev24.length;
+  const pct = ((recent - prev) / prev) * 100;
+  if (pct > 2) return 2;
+  if (pct > 0.5) return 1;
+  if (pct < -2) return -2;
+  if (pct < -0.5) return -1;
+  return 0;
+}
+
+function volRatio(prices) {
+  if (!prices || prices.length < 24) return null;
+  const last = prices.slice(-12);
+  const prev = prices.slice(-24, -12);
+  const avgMove = arr => {
+    let sum = 0;
+    for (let i = 1; i < arr.length; i++) sum += Math.abs(arr[i] - arr[i - 1]) / (arr[i - 1] || 0.0001);
+    return sum / (arr.length - 1);
+  };
+  const aL = avgMove(last), aP = avgMove(prev);
+  if (aP === 0) return null;
+  return aL / aP;
+}
+
+function ema(prices) {
+  if (!prices || prices.length < 9) return null;
+  const last3 = prices.slice(-3);
+  const prev6 = prices.slice(-9, -3);
+  const recent = last3.reduce((s, p) => s + p, 0) / 3;
+  const prior = prev6.reduce((s, p) => s + p, 0) / 6;
+  const pct = ((recent - prior) / prior) * 100;
+  if (pct < -3) return -2;
+  if (pct < -1) return -1;
+  if (pct > 3) return 2;
+  if (pct > 1) return 1;
+  return 0;
+}
+
+function peakDist(prices, sym) {
+  if (!prices || prices.length < 10) return null;
+  const cur = prices[prices.length - 1];
+  const high = Math.max(...prices);
+  const peaker = loadPeakTracker();
+  const prev = peaker[sym] || 0;
+  if (high > prev) { peaker[sym] = high; savePeakTracker(peaker); }
+  const truePeak = Math.max(high, prev);
+  return ((cur - truePeak) / truePeak) * 100;
 }
 
 function score(chg, vol, type) {
@@ -306,18 +385,19 @@ async function fetchBals() {
   const ids = PORTFOLIO.map(p => p.id);
   const args = Buffer.from(JSON.stringify({ account_id: ACCOUNT, token_ids: ids })).toString('base64');
   const body = { jsonrpc: '2.0', id: 1, method: 'query', params: { request_type: 'call_function', account_id: 'intents.near', method_name: 'mt_batch_balance_of', args_base64: args, finality: 'optimistic' } };
-  for (const rpc of RPC_ENDPOINTS) {
+  for (let i = 0; i < RPC_ENDPOINTS.length; i++) {
+    const rpc = RPC_ENDPOINTS[i];
     try {
       const r = await httpPost(rpc, body);
       if (!r.d?.result?.result) continue;
       const parsed = JSON.parse(Buffer.from(r.d.result.result, 'base64').toString());
-      const bals = PORTFOLIO.map((p, i) => {
-        const raw = Array.isArray(parsed) ? (parsed[i] || '0') : '0';
+      const bals = PORTFOLIO.map((p, j) => {
+        const raw = Array.isArray(parsed) ? (parsed[j] || '0') : '0';
         return { ...p, raw, human: Number(BigInt(raw)) / 10 ** p.dec };
       });
       try { fs.writeFileSync(BAL_CACHE_FILE, JSON.stringify(bals)); } catch(e) {}
       return bals;
-    } catch(e) { log(`Bal fetch err (${rpc.slice(8, 28)}): ${e.message}`); }
+    } catch(e) { if (i === RPC_ENDPOINTS.length - 1) log(`Balance fetch failed, using cached balances`); }
   }
   try {
     const cached = JSON.parse(fs.readFileSync(BAL_CACHE_FILE, 'utf8'));
@@ -448,7 +528,7 @@ async function checkLiquidity(fromId, toId, rawAmount) {
       depositType: 'INTENTS', deadline: dl,
     }, { 'Authorization': `Bearer ${jwt}` });
     return r.d?.quote?.amountOut != null;
-  } catch(e) { return false; }
+  } catch(e) { return null; } // null = network error
 }
 
 // ─── Borsh NEP-413 signing (inlined from nep413_sign.js) ───
@@ -566,6 +646,13 @@ function saveFrozenSyms(syms) {
   try { fs.writeFileSync(FROZEN_FILE, JSON.stringify([...syms])); } catch(e) {}
 }
 
+function loadPeakTracker() {
+  try { return JSON.parse(fs.readFileSync(PEAK_FILE, 'utf8')); } catch(e) { return {}; }
+}
+function savePeakTracker(p) {
+  try { fs.writeFileSync(PEAK_FILE, JSON.stringify({ ...p, updated: new Date().toISOString() })); } catch(e) {}
+}
+
 function logRouteChange(sym, event, detail) {
   const msg = `[${new Date().toISOString()}] ${sym} ${event}${detail ? ' — ' + detail : ''}`;
   console.log(`  📋 ${msg}`);
@@ -611,14 +698,15 @@ function saveRouteInventoryCache(tradable) {
   try { fs.writeFileSync(ROUTE_INVENTORY_FILE, JSON.stringify({ ts: Date.now(), tradable: [...tradable] })); } catch(e) {}
 }
 
-async function buildRouteInventory(portfolio, jwt) {
+async function buildRouteInventory(portfolio, jwt, routeHealth) {
   const tradable = new Set(['USDC', 'wNEAR']);
   for (const t of portfolio) {
     if (tradable.has(t.sym)) continue;
     const rawAmt = Math.floor(MIN_POSITION_VALUE * 1e6).toString();
+    let buyOk = false, sellOk = false, note = '';
     try {
       const dl = new Date(Date.now() + 86400000).toISOString().replace(/\.\d+Z/, '.000Z');
-      const r = await httpPost('https://1click.chaindefuser.com/v0/quote', {
+      const buyR = await httpPost('https://1click.chaindefuser.com/v0/quote', {
         dry: true, swapType: 'EXACT_INPUT', depositMode: 'SIMPLE',
         originAsset: USDC_NEAR, destinationAsset: t.id,
         amount: rawAmt, slippageTolerance: 100,
@@ -626,9 +714,23 @@ async function buildRouteInventory(portfolio, jwt) {
         refundTo: ACCOUNT, refundType: 'INTENTS',
         depositType: 'INTENTS', deadline: dl,
       }, { 'Authorization': `Bearer ${jwt}` });
-      if (r.d?.quote?.amountOut != null) tradable.add(t.sym);
+      buyOk = buyR.d?.quote?.amountOut != null;
+      if (!buyOk) { note = buyR.d?.error || 'no buy route'; await sleep(200); if (routeHealth) routeHealth.push({ t: t.sym, buy: buyOk, sell: sellOk, note }); continue; }
       await sleep(200);
-    } catch(e) {}
+      const sellR = await httpPost('https://1click.chaindefuser.com/v0/quote', {
+        dry: true, swapType: 'EXACT_INPUT', depositMode: 'SIMPLE',
+        originAsset: t.id, destinationAsset: USDC_NEAR,
+        amount: rawAmt, slippageTolerance: 100,
+        recipient: ACCOUNT, recipientType: 'INTENTS',
+        refundTo: ACCOUNT, refundType: 'INTENTS',
+        depositType: 'INTENTS', deadline: dl,
+      }, { 'Authorization': `Bearer ${jwt}` });
+      sellOk = sellR.d?.quote?.amountOut != null;
+      if (!sellOk) note = sellR.d?.error || 'no sell route';
+      if (sellOk) tradable.add(t.sym);
+      await sleep(200);
+    } catch(e) { note = e.message?.slice(0, 50) || 'error'; }
+    if (routeHealth) routeHealth.push({ t: t.sym, buy: buyOk, sell: sellOk, note });
   }
   saveRouteInventoryCache(tradable);
   return tradable;
@@ -650,9 +752,10 @@ async function main() {
 
   // Route inventory — cache of which tokens have active 1Click swap routes
   let routeInv = canExec ? loadRouteInventoryCache() : null;
+  const routeHealth = [];
   if (canExec && !routeInv) {
     log('Building route inventory...');
-    routeInv = await buildRouteInventory(PORTFOLIO, env.jwt);
+    routeInv = await buildRouteInventory(PORTFOLIO, env.jwt, routeHealth);
     log(`Route inventory: ${routeInv.size} tradable of ${PORTFOLIO.length}`);
   } else if (canExec) {
     log(`Route inventory: ${routeInv.size} tradable (cached)`);
@@ -708,7 +811,13 @@ async function main() {
     if (price == null) continue;
     const ch = cg?.usd_24h_change ?? 0;
     const vol = cg?.usd_24h_vol ?? 0;
-    assets[sym] = { p: price, ch, v: vol, sc: score(ch, vol, 'c') };
+    const mcap = cg?.usd_market_cap ?? 0;
+    assets[sym] = { p: price, ch, v: vol, mc: mcap, sc: score(ch, vol, 'c') };
+  }
+
+  const healthyPriceData = Object.keys(assets).length >= 30;
+  if (!healthyPriceData) {
+    log(`⚠️ Degraded mode: only ${Object.keys(assets).length}/${Object.keys(CG_IDS).length} token prices (network issues?) — holding positions, no trades`);
   }
 
   // ETFs
@@ -730,11 +839,18 @@ async function main() {
   // Load failed tokens + last positions from history for RSI + candidate filtering
   let failedTokens = new Set();
   let lastPos = [];
+  let fallbackPrices = {};
   try {
     const h = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
     if (Array.isArray(h) && h.length > 0) {
       failedTokens = new Set(h[h.length - 1].failedTokens || []);
       lastPos = (h[h.length - 1].pos || []).filter(p => p.v >= 0.50).map(p => p.s);
+      const lastEntry = h[h.length - 1];
+      if (lastEntry.pos) {
+        for (const p of lastEntry.pos) {
+          if (p.q > 0 && p.v > 0) fallbackPrices[p.s] = p.v / p.q;
+        }
+      }
     }
   } catch(e) {}
   // Ondo ETFs (symbols ending in "on") have no swap routes on 1Click — block all dynamically
@@ -764,8 +880,10 @@ async function main() {
       logRouteChange(sym, 'reappeared');
       frozenSyms.delete(sym);
       delete failCooldown[sym];
-      flapSyms[sym] = Date.now();
-      saveFlapSyms(flapSyms);
+      if (healthyPriceData) {
+        flapSyms[sym] = Date.now();
+        saveFlapSyms(flapSyms);
+      }
     } else {
       failCooldown[sym] = Date.now();
       log(`  ${sym} frozen: still no swap route`);
@@ -783,19 +901,28 @@ async function main() {
   saveFailCooldown(failCooldown);
 
   // RSI — held tokens (from history) + top 15 scorers
-  const sorted = Object.entries(assets).sort((a, b) => b[1].sc - a[1].sc);
+  const sorted = Object.entries(assets).sort((a, b) => {
+    const scDiff = b[1].sc - a[1].sc;
+    if (scDiff !== 0) return scDiff;
+    return (b[1].ch || 0) - (a[1].ch || 0);
+  });
   const top15 = sorted.slice(0, 15).map(e => e[0]);
 
   const rsis = {};
+  const moms = {};
+  const vols = {};
+  const ems = {};
+  const pds = {};
   // Sequential fetch: held (for OB detection) + top 5 crypto scorers (buy candidates)
   // ETFs score high on stock market days but have no CG IDs — skip them
-  const cryptoScorers = sorted.filter(([sym]) => CG_IDS[sym] && CG_IDS[sym] !== 'near' && sym !== 'USDC' && routeInv.has(sym)).map(e => e[0]);
-  const rsiPriority = [...new Set([...lastPos, ...cryptoScorers.slice(0, 5)])];
+  const cryptoScorers = sorted.filter(([sym]) => CG_IDS[sym] && sym !== 'NEAR' && sym !== 'USDC' && routeInv.has(sym)).map(e => e[0]);
+  const rsiPriority = [...new Set([...lastPos, ...cryptoScorers.slice(0, 8)])];
   for (let i = 0; i < rsiPriority.length; i++) {
     const sym = rsiPriority[i];
     const id = CG_IDS[sym];
-    const { closes, fromCache } = await fetchOHLC(id);
+    const [{ closes, fromCache }, { prices }] = await Promise.all([fetchOHLC(id), fetchIntraday(id)]);
     if (closes) rsis[sym] = rsi(closes);
+    if (prices) { moms[sym] = intradayMom(prices); vols[sym] = volRatio(prices); ems[sym] = ema(prices); pds[sym] = peakDist(prices, sym); }
     if (!fromCache) await sleep(i === rsiPriority.length - 1 ? 0 : 3000);
   }
   // ETF RSI from stored data
@@ -804,14 +931,39 @@ async function main() {
   }
 
   // Top assets ranked
-  const ranked = sorted.map(([sym, a]) => ({ sym, ...a, r: rsis[sym] }));
+  const ranked = sorted.map(([sym, a]) => ({ sym, ...a, r: rsis[sym], m: moms[sym], v: vols[sym], e: ems[sym], d: pds[sym] }))
+    .sort((a, b) => {
+      if (b.sc !== a.sc) return b.sc - a.sc;
+      const mA = a.m, mB = b.m;
+      if (mA !== undefined && mB !== undefined && mA !== mB) return mB - mA;
+      return (b.ch || 0) - (a.ch || 0);
+    });
   const downCount = ranked.slice(0, 15).filter(a => a.ch < 0).length;
 
-  log('Top 5:');
-  ranked.filter(a => routeInv.has(a.sym)).slice(0, 5).forEach(a => log(`  ${a.sym}: sc=${a.sc} $${a.p?.toFixed(4)||'?'} ${a.ch?.toFixed(1)||'?'}% RS${a.r !== undefined ? 'I='+a.r.toFixed(0) : '--'}`));
+  log('Top 8:');
+  ranked.filter(a => routeInv.has(a.sym) && a.sym !== 'NEAR').slice(0, 8).forEach(a => {
+    const rsiStr = (a.r !== undefined ? `RSI=${a.r.toFixed(0)}` : 'RS--').padEnd(6);
+    const momStr = (a.m !== undefined ? `MOM:${a.m >= 0 ? '+' : ''}${a.m}` : '').padEnd(6);
+    const volIcon = a.v !== undefined && a.v !== null ? (a.v > 3 ? '🔥' : a.v > 2 ? '⚡' : '  ') : '';
+    const volStr = volIcon + (a.v !== undefined && a.v !== null ? `VOL:${a.v.toFixed(1)}x` : '').padEnd(8);
+    const emaIcon = a.e !== undefined && a.e !== null ? (a.e === -2 ? '💀' : a.e === 2 ? '🚀' : a.e === -1 ? '📉' : a.e === 1 ? '📈' : '  ') : '';
+    const emaStr = emaIcon + (a.e !== undefined && a.e !== null ? `EMA:${a.e >= 0 ? '+' : ''}${a.e}` : '').padEnd(6);
+    const pdStr = a.d !== undefined && a.d !== null ? `PD:${a.d.toFixed(1)}%` : '';
+    log(`  ${a.sym.padEnd(11)} sc=${a.sc}   $${(a.p?.toFixed(4)||'?').padStart(10)}  ${(a.ch?.toFixed(1)||'?').padStart(6)}%  ${rsiStr} ${momStr} ${volStr} ${emaStr} ${pdStr}`);
+  });
 
   // Portfolio
   let bals = await fetchBals();
+  // Remove frozen entries where balance is now 0
+  for (const sym of [...frozenSyms]) {
+    const bal = bals.find(b => b.sym === sym);
+    if (!bal || bal.human <= 0) {
+      log(`  ${sym} balance empty, removing from frozen`);
+      frozenSyms.delete(sym);
+      delete failCooldown[sym];
+    }
+  }
+  saveFrozenSyms(frozenSyms);
   // Recover hidden 1cs_v1: positions (invisible to mt_batch_balance_of)
   if (env.jwt) {
     for (const [sym, cb] of Object.entries(costBasis)) {
@@ -851,9 +1003,10 @@ async function main() {
   for (const b of hasPositions) log(`  ${b.sym}: ${b.human.toFixed(6)}`);
 
   // Valuations
+  const assetPrice = (sym) => sym === 'USDC' ? 1 : (assets[sym]?.p || fallbackPrices[sym] || 0);
   let pricedPositions = hasPositions.map(h => {
-    const p = h.sym === 'USDC' ? 1 : (assets[h.sym]?.p || 0);
-    return { ...h, price: p, value: p * h.human, score: h.sym === 'USDC' ? 0 : (assets[h.sym]?.sc || 0), ch: assets[h.sym]?.ch, rsi: rsis[h.sym] };
+    const p = assetPrice(h.sym);
+    return { ...h, price: p, value: p * h.human, score: h.sym === 'USDC' ? 0 : (assets[h.sym]?.sc || 0), ch: assets[h.sym]?.ch, rsi: rsis[h.sym], mom: moms[h.sym], vol: vols[h.sym], e: ems[h.sym] };
   });
   const totalValue = pricedPositions.reduce((s, p) => s + p.value, 0);
   // exclude USDC from total for decision purposes (it's the stable)
@@ -872,9 +1025,15 @@ async function main() {
   // Route health check for all held positions
   for (const p of nonStablePositions) {
     const hasRoute = await checkLiquidity(p.id, USDC_NEAR, p.raw);
-    if (!hasRoute) {
+    if (hasRoute === false) {
       log(`  ⚠️ HELD ${p.sym} ($${p.value.toFixed(2)}) has no sell route!`);
       failedTokens.add(p.sym);
+      routeHealth.push({ t: p.sym, buy: '?', sell: false, note: 'held: no sell route' });
+    } else if (hasRoute === null) {
+      log(`  ⚠️ ${p.sym} sell route check failed (network error), keeping position`);
+      routeHealth.push({ t: p.sym, buy: '?', sell: null, note: 'held: network error' });
+    } else {
+      routeHealth.push({ t: p.sym, buy: '?', sell: true, note: 'held: ok' });
     }
   }
   // Re-check failed tokens that are NOT held — if route is back, allow them again
@@ -891,20 +1050,28 @@ async function main() {
       failedTokens.delete(sym);
       delete failCooldown[sym];
       saveFailCooldown(failCooldown);
-      flapSyms[sym] = Date.now();
-      saveFlapSyms(flapSyms);
+      if (healthyPriceData) {
+        flapSyms[sym] = Date.now();
+        saveFlapSyms(flapSyms);
+      }
+      routeHealth.push({ t: sym, buy: true, sell: '?', note: 're-check: buy route back' });
     } else {
       // Re-check found no route — reset cooldown to prevent retry next cycle
+      if (hasRoute === null) routeHealth.push({ t: sym, buy: null, sell: '?', note: 're-check: network error' });
+      else routeHealth.push({ t: sym, buy: false, sell: '?', note: 're-check: no buy route' });
       failCooldown[sym] = Date.now();
       saveFailCooldown(failCooldown);
     }
   }
 
   // Apply route-flap penalty (-1 score for recently recovered tokens)
-  for (const sym of Object.keys(flapSyms)) {
-    if (assets[sym]) {
-      assets[sym].sc = Math.max(-2, assets[sym].sc - 1);
-      log(`  ${sym}: flap penalty applied (sc ${assets[sym].sc + 1} → ${assets[sym].sc})`);
+  // Only when price data is healthy — don't penalize if route flap was due to network issues
+  if (healthyPriceData) {
+    for (const sym of Object.keys(flapSyms)) {
+      if (assets[sym]) {
+        assets[sym].sc = Math.max(-2, assets[sym].sc - 1);
+        log(`  ${sym}: flap penalty applied (sc ${assets[sym].sc + 1} → ${assets[sym].sc})`);
+      }
     }
   }
 
@@ -913,6 +1080,8 @@ async function main() {
 
   if (nearBal < GAS_RESERVE) {
     action = 'HOLD'; reason = `Low gas (${nearBal.toFixed(2)} NEAR)`;
+  } else if (!healthyPriceData) {
+    action = 'HOLD'; reason = 'Degraded mode: price data unreliable';
   } else if (nonStablePositions.length > 0) {
     // Track score dips for junk hold timer
     for (const p of nonStablePositions) {
@@ -936,13 +1105,28 @@ async function main() {
       if (p.rsi !== undefined && p.rsi > 92 && p.score < 7 && Date.now() - (obTimers[p.sym] || 0) >= OB_HOLD_MS) { action = 'SELL'; reason = `${p.sym} OB RSI=${p.rsi.toFixed(0)} sc=${p.score}`; break; }
       // Junk sell: exit positions below sc=5 only after hold timer expires
       if (hasRealScores && p.score < 5 && Date.now() - (junkTimers[p.sym] || 0) >= JUNK_HOLD_MS) { action = 'SELL'; reason = `${p.sym} junk sc=${p.score}`; break; }
+      // Sharp drop: MOM = -2 sell immediately
+      if (p.m !== undefined && p.m === -2) { action = 'SELL'; reason = `${p.sym} sharp drop MOM=${p.m}`; break; }
+      // Volatile drop: VOL > 3 and negative momentum
+      if (p.vol !== undefined && p.vol > 3 && p.m !== undefined && p.m < 0) { action = 'SELL'; reason = `${p.sym} volatile drop VOL=${p.vol.toFixed(1)}x MOM=${p.m}`; break; }
+      // EMA crash: EMA:-2 sell immediately
+      if (p.e !== undefined && p.e === -2) { action = 'SELL'; reason = `${p.sym} EMA crash`; break; }
+      // Pump end: near peak, extreme vol, momentum dying
+      if (p.pd !== undefined && p.pd > -2 && p.vol !== undefined && p.vol > 2.5 && p.rsi !== undefined && p.rsi > 80 && p.e !== undefined && p.e <= 0) {
+        action = 'SELL'; reason = `${p.sym} pump end PD=${p.pd.toFixed(0)}% VOL=${p.vol.toFixed(1)}x RSI=${p.rsi.toFixed(0)}`; break;
+      }
+      // Emergency crash: near peak then EMA goes -2
+      if (p.pd !== undefined && p.pd > -5 && p.e === -2) {
+        action = 'SELL'; reason = `${p.sym} crash PD=${p.pd.toFixed(0)}% EMA:-2`; break;
+      }
     }
     // Check rotation if no immediate sell
     if (action === 'HOLD') {
       const worst = nonStablePositions.reduce((w, p) => p.score < (w?.score ?? Infinity) ? p : w, nonStablePositions[0]);
       const heldTooShort = holdStart[worst.sym] && Date.now() - holdStart[worst.sym] < HOLD_MIN_MS;
       if (heldTooShort) { log(`  ${worst.sym} held < ${HOLD_MIN_MS/60000}min, skip rotate`); }
-      const bestNew = !heldTooShort && ranked.find(a => a.sc >= 6 && (a.r === undefined || a.r < 92) && !failedTokens.has(a.sym) && !nonStablePositions.find(p => p.sym === a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym) && a.sc >= (worst?.score || 0) + 2);
+      const pumpStart = a => a.v !== undefined && a.v > 2.5 && a.e === 2 && a.d !== undefined && a.d < -10 && (a.r === undefined || a.r < 85);
+      const bestNew = !heldTooShort && ranked.find(a => a.sym !== 'NEAR' && (a.sc >= 6 || (a.sc >= 5 && a.m !== undefined && a.m >= 2) || pumpStart(a)) && (a.r === undefined || a.r < 80) && (a.m === undefined || a.m >= 0) && (a.v === undefined || a.v === null || a.v <= 3 || pumpStart(a)) && (a.e === undefined || a.e === null || a.e >= 0) && !failedTokens.has(a.sym) && !nonStablePositions.find(p => p.sym === a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym) && a.sc >= (worst?.score || 0) + 2);
       if (bestNew) {
         const slotOpen = nonStablePositions.length < MAX_POSITIONS;
         const usdcForBuy = usdcBal?.human || 0;
@@ -956,20 +1140,31 @@ async function main() {
     }
   }
   // If no sell/rotate and room to buy more
+  let buyTargetSym;
   if (action === 'HOLD' && nonStablePositions.length < MAX_POSITIONS) {
     const heldSyms = new Set(nonStablePositions.map(p => p.sym));
-    const candidate = ranked.find(a => a.sc >= 6 && (a.r === undefined || a.r < 92) && !failedTokens.has(a.sym) && !heldSyms.has(a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym));
+    const pumpStart = a => a.v !== undefined && a.v > 2.5 && a.e === 2 && a.d !== undefined && a.d < -10 && (a.r === undefined || a.r < 85);
+    const candidate = ranked.find(a => a.sym !== 'NEAR' && (a.sc >= 6 || (a.sc >= 5 && a.m !== undefined && a.m >= 2) || pumpStart(a)) && (a.r === undefined || a.r < 80) && (a.m === undefined || a.m >= 0) && (a.v === undefined || a.v === null || a.v <= 3 || pumpStart(a)) && (a.e === undefined || a.e === null || a.e >= 0) && !failedTokens.has(a.sym) && !heldSyms.has(a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym));
     const usdcForBuy = usdcBal?.human || 0;
     if (candidate && PORTFOLIO.find(p => p.sym === candidate.sym) && usdcForBuy >= MIN_POSITION_VALUE - 0.50) {
-      action = 'BUY'; reason = `Buy ${candidate.sym} (sc=${candidate.sc}) #${nonStablePositions.length + 1}/${MAX_POSITIONS}`;
+      action = 'BUY'; reason = `Buy ${candidate.sym} (sc=${candidate.sc}) #${nonStablePositions.length + 1}/${MAX_POSITIONS}`; buyTargetSym = candidate.sym;
     } else if (candidate && PORTFOLIO.find(p => p.sym === candidate.sym)) {
-      // Check if selling a holding could cover the USDC gap
-      const gap = MIN_POSITION_VALUE - usdcForBuy;
-          const canSell = nonStablePositions.some(p => p.value >= gap && p.value >= MIN_TRADE && candidate.sc >= (p.score || 0) && !raisedSyms[p.sym]);
-      if (canSell) {
-        action = 'BUY'; reason = `Buy ${candidate.sym} (sc=${candidate.sc}) #${nonStablePositions.length + 1}/${MAX_POSITIONS} (sell to raise USDC)`;
+      // Fresh route check before selling — cache may be stale
+      const buyTarget = buyEntry(candidate.sym);
+      const routeOk = buyTarget ? await checkLiquidity(USDC_NEAR, buyTarget.id, Math.floor(MIN_POSITION_VALUE * 1e6).toString()) : false;
+      if (routeOk === false) {
+        reason = `${candidate.sym} buy route expired (cache stale), skipping`;
+      } else if (routeOk === null) {
+        reason = `${candidate.sym} buy route check failed (network error), skipping`;
       } else {
-        reason = `${candidate.sym} available but not enough accessible value`;
+        // Check if selling a holding could cover the USDC gap
+        const gap = MIN_POSITION_VALUE - usdcForBuy;
+        const canSell = nonStablePositions.some(p => p.value >= gap && p.value >= MIN_TRADE && candidate.sc >= (p.score || 0) && !raisedSyms[p.sym]);
+        if (canSell) {
+          action = 'BUY'; reason = `Buy ${candidate.sym} (sc=${candidate.sc}) #${nonStablePositions.length + 1}/${MAX_POSITIONS} (sell to raise USDC)`; buyTargetSym = candidate.sym;
+        } else {
+          reason = `${candidate.sym} available but not enough accessible value`;
+        }
       }
     } else if (candidate) {
       reason = `${candidate.sym} available but not tradeable`;
@@ -1031,7 +1226,8 @@ async function main() {
       for (const p of nonStablePositions) {
         if (p.value < MIN_TRADE) continue;
         const liq = await checkLiquidity(p.id, USDC_NEAR, p.raw);
-        if (!liq) { log(`  ⚠️ ${p.sym} has no sell route, marking failed`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); continue; }
+        if (liq === false) { log(`  ⚠️ ${p.sym} has no sell route, marking failed`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); continue; }
+        if (liq === null) { log(`  ⚠️ ${p.sym} sell route check failed (network error), skipping`); continue; }
         log(`Sell ${p.sym}→USDC...`);
         const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, p.raw, env.pk, assets);
         tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1054,7 +1250,8 @@ async function main() {
       const p = nonStablePositions.find(x => reason.startsWith(x.sym));
       if (p) {
         const liq = await checkLiquidity(p.id, USDC_NEAR, p.raw);
-        if (!liq) { log(`  ⚠️ ${p.sym} has no sell route, skipping`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); }
+        if (liq === false) { log(`  ⚠️ ${p.sym} has no sell route, skipping`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); }
+        else if (liq === null) { log(`  ⚠️ ${p.sym} sell route check failed (network error), skipping`); }
         else {
           log(`Sell ${p.sym}→USDC...`);
           const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, p.raw, env.pk, assets);
@@ -1082,13 +1279,14 @@ async function main() {
         const rebalRank = rebalSorted.findIndex(x => x.sym === p.sym);
         const rebalTier = tierPct(rebalRank >= 0 ? Math.min(rebalRank, 2) : 2, nonStablePositions.length);
         const liq = await checkLiquidity(p.id, USDC_NEAR, p.raw);
-        if (!liq) { log(`  ⚠️ ${p.sym} has no sell route, cannot rebalance`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); }
+        if (liq === false) { log(`  ⚠️ ${p.sym} has no sell route, cannot rebalance`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); }
+        else if (liq === null) { log(`  ⚠️ ${p.sym} sell route check failed (network error), cannot rebalance`); }
         else {
           const heldSyms = new Set(nonStablePositions.map(x => x.sym));
           let buyBest = null;
           for (const best of ranked) {
-        if (best.sc < 5) break;
-            if (best.sym === p.sym || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || !routeInv.has(best.sym)) continue;
+        if (!(best.sc >= 6 || (best.sc >= 5 && best.m !== undefined && best.m >= 2))) break;
+            if (best.sym === p.sym || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || (best.m !== undefined && best.m < 0) || !routeInv.has(best.sym)) continue;
             if (heldSyms.has(best.sym)) {
               const curVal = nonStablePositions.find(x => x.sym === best.sym)?.value || 0;
               const grandTotal = investableTotal;
@@ -1174,13 +1372,14 @@ async function main() {
       const worstRank = worstSorted.findIndex(p => p.sym === worst.sym);
       const worstTier = tierPct(worstRank >= 0 ? Math.min(worstRank, 2) : 2, nonStablePositions.length);
       const liq = await checkLiquidity(worst.id, USDC_NEAR, worst.raw);
-      if (!liq) { log(`  ⚠️ ${worst.sym} has no sell route, cannot rotate`); newFailedTokens.add(worst.sym); if (routePrev.has(worst.sym)) logRouteChange(worst.sym, 'disappeared'); }
+      if (liq === false) { log(`  ⚠️ ${worst.sym} has no sell route, cannot rotate`); newFailedTokens.add(worst.sym); if (routePrev.has(worst.sym)) logRouteChange(worst.sym, 'disappeared'); }
+      else if (liq === null) { log(`  ⚠️ ${worst.sym} sell route check failed (network error), cannot rotate`); }
       else {
         const heldSyms = new Set(nonStablePositions.map(p => p.sym));
         let buyBest = null;
         for (const best of ranked) {
-          if (best.sc < 5) break;
-          if (failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || !routeInv.has(best.sym)) continue;
+          if (!(best.sc >= 6 || (best.sc >= 5 && best.m !== undefined && best.m >= 2))) break;
+          if (failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || (best.m !== undefined && best.m < 0) || !routeInv.has(best.sym)) continue;
           if (best.sym === worst.sym) continue;
           if (heldSyms.has(best.sym)) {
             const curVal = nonStablePositions.find(p => p.sym === best.sym)?.value || 0;
@@ -1287,7 +1486,8 @@ async function main() {
             if (BigInt(rawToSell) < BigInt(Math.floor(0.5 * 1e6))) continue;
           }
           const liq = await checkLiquidity(sellP.id, USDC_NEAR, rawToSell);
-          if (!liq) { log(`  ⚠️ ${sellP.sym} no sell route, cannot raise USDC`); continue; }
+          if (liq === false) { log(`  ⚠️ ${sellP.sym} no sell route, cannot raise USDC`); continue; }
+          else if (liq === null) { log(`  ⚠️ ${sellP.sym} sell route check failed (network error), cannot raise USDC`); continue; }
           log(`  Raise USDC: sell ${sellP.sym} ($${isFullSell ? sellP.value.toFixed(2) : shortfall.toFixed(2)})...`);
           const r = await execSwap(sellP, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, rawToSell, env.pk, assets);
           tradedThisCycle = true; lastSwapFee = (lastSwapFee || 0) + (r.feeUsd || 0);
@@ -1347,34 +1547,46 @@ async function main() {
         action = 'HOLD';
       }
       const heldSyms = new Set([...nonStablePositions.map(p => p.sym), ...soldSyms]);
-      const tried = new Set();
-      for (const best of ranked) {
-        if (best.sc < 5) break;
-        if (tried.has(best.sym) || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || !routeInv.has(best.sym)) continue;
-        if (heldSyms.has(best.sym)) continue;
-        tried.add(best.sym);
+      // Try the decision's candidate first, fall back to ranked scan
+      async function tryBuy(sym) {
+        const best = ranked.find(a => a.sym === sym);
+        if (!best) return false;
+        if (!(best.sc >= 6 || (best.sc >= 5 && best.m !== undefined && best.m >= 2)) || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || (best.m !== undefined && best.m < 0) || !routeInv.has(best.sym)) return false;
+        if (heldSyms.has(best.sym)) return false;
         const target = buyEntry(best.sym);
-        if (!target) continue;
-        if (!usdcBal || usdcBal.human < MIN_POSITION_VALUE - 0.50) continue;
+        if (!target || !usdcBal || usdcBal.human < MIN_POSITION_VALUE - 0.50) return false;
         const slotIdx = Math.min(nonStablePositions.length, 2);
         const grandTotal = investableTotal;
         let buyUsd = Math.max(MIN_POSITION_VALUE - 0.50, Math.min(usdcBal.human, grandTotal * tierPct(slotIdx, nonStablePositions.length + 1)));
         const amt = Math.floor(buyUsd * 1e6);
-        if (amt < Math.floor((MIN_POSITION_VALUE - 0.50) * 1e6)) break;
+        if (amt < Math.floor((MIN_POSITION_VALUE - 0.50) * 1e6)) return false;
         const liq = await checkLiquidity(USDC_NEAR, target.id, amt.toString());
-        if (!liq) { log(`  ⚠️ ${best.sym} no buy route`); newFailedTokens.add(best.sym); if (routePrev.has(best.sym)) logRouteChange(best.sym, 'disappeared'); continue; }
+        if (liq !== true) { if (liq === false) { log(`  ⚠️ ${sym} no buy route`); newFailedTokens.add(sym); if (routePrev.has(sym)) logRouteChange(sym, 'disappeared'); } else if (liq === null) { log(`  ⚠️ ${sym} buy route check failed (network error), skipping`); } return false; }
+        const sellCheck = await checkLiquidity(target.id, USDC_NEAR, Math.floor(MIN_POSITION_VALUE * 1e6).toString());
+        if (sellCheck !== true) { routeHealth.push({ t: sym, buy: true, sell: sellCheck === null ? null : false, note: sellCheck === null ? 'buy-check: sell route network error' : 'buy-check: no sell route' }); log(`  ⚠️ ${sym} no sell route, skipping buy`); if (sellCheck === false) { newFailedTokens.add(sym); if (routePrev.has(sym)) logRouteChange(sym, 'disappeared'); } return false; }
+        routeHealth.push({ t: sym, buy: true, sell: true, note: 'buy-check: both routes ok' });
+        // AI validation
+        if (deepseek.hasKey()) {
+          const aiMsg = [
+            { role: 'system', content: 'You are a crypto trading assistant. Validate whether buying the given token is a good idea. Reply ONLY with "YES" or "NO" followed by a brief reason. Be conservative.' },
+            { role: 'user', content: `F&G ${fg.v}/100 ${fg.t}. Propose: BUY ${best.sym} (sc=${best.sc}, RSI=${best.r ?? '?'}, MOM=${best.m ?? '?'}, ${best.ch >= 0 ? '+' : ''}${best.ch?.toFixed(1) || '?'}% 24h). Portfolio: ${pricedPositions.filter(p => p.value > 0.01).map(p => `${p.sym}=$${p.value.toFixed(0)}`).join(', ') || 'empty'}.` },
+          ];
+          const aiReply = await deepseek.chat(aiMsg, { maxTokens: 100, temperature: 0.1 });
+          if (aiReply && aiReply.startsWith('NO')) { log(`  🤖 ${aiReply}`); return false; }
+        }
         log(`Buy ${best.sym} $${buyUsd.toFixed(2)} (#${nonStablePositions.length + 1}/${MAX_POSITIONS})...`);
         const r = await execSwap({ id: USDC_NEAR, sym: 'USDC', dec: 6 }, target, amt.toString(), env.pk, assets);
         tradedThisCycle = true; if (r?.feeUsd || r?.spread) lastSwapFee += (r.feeUsd || 0);
-        if (r?.ok) {
+        if (!r?.ok) { log(`  Buy skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`); return false; }
+          const outQty = Number(r.out) || 0;
+          if (buyUsd <= 0 || outQty <= 0) { log(`  ⚠️ ${sym} cost basis invalid (buyUsd=${buyUsd}, outQty=${outQty}), skipping`); markTrade(); return true; }
           const usdcB2 = bals.findIndex(b => b.sym === 'USDC');
           if (usdcB2 >= 0) bals[usdcB2].human -= buyUsd;
           const buyB2 = bals.findIndex(b => b.sym === target.sym);
           if (buyB2 >= 0 && r.out) bals[buyB2].human += Number(r.out);
           raisedSyms[target.sym] = Date.now(); saveRaisedSyms(raisedSyms);
           const prevCb = costBasis[target.sym];
-          const outQty = Number(r.out) || 0;
-            costBasis[target.sym] = {
+          costBasis[target.sym] = {
             cost: (prevCb?.cost || 0) + buyUsd,
             spread: r?.spread || prevCb?.spread || 0,
             fee: (prevCb?.fee || 0) + (r?.feeUsd || 0),
@@ -1385,17 +1597,26 @@ async function main() {
           const buyPrice = outQty > 0 ? buyUsd / outQty : 0;
           log(`  Cost: $${buyUsd.toFixed(2)} @ $${buyPrice.toFixed(4)}/ea [spread ${r?.spread?.toFixed(2) || 0}%${(r?.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
           holdStart[target.sym] = Date.now();
-          markTrade(); break;
-        } else {
-          if (r === null) { newFailedTokens.add(best.sym); if (routePrev.has(best.sym)) logRouteChange(best.sym, 'swap_failed'); }
-          log(`  Buy skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
+          markTrade(); return true;
+      }
+      // Try decision candidate first, fall back to ranked scan
+      let bought = false;
+      if (buyTargetSym) bought = await tryBuy(buyTargetSym);
+      if (!bought) {
+        const tried = new Set();
+        for (const best of ranked) {
+          if (!(best.sc >= 6 || (best.sc >= 5 && best.m !== undefined && best.m >= 2))) break;
+          if (tried.has(best.sym) || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || (best.m !== undefined && best.m < 0) || !routeInv.has(best.sym)) continue;
+          if (heldSyms.has(best.sym)) continue;
+          tried.add(best.sym);
+          if (await tryBuy(best.sym)) break;
         }
       }
     } else if (action === 'TOPUP') {
       const topupSym = reason.split(' ')[2];
       const target = buyEntry(topupSym);
       const pos = nonStablePositions.find(p => p.sym === topupSym);
-      if (target && pos && usdcBal?.human >= MIN_POSITION_VALUE - 0.50) {
+      if (target && pos && !failedTokens.has(topupSym) && usdcBal?.human >= MIN_POSITION_VALUE - 0.50) {
         const grandTotal = investableTotal;
         const sortedPos = [...nonStablePositions].sort((a, b) => (b.score || 0) - (a.score || 0));
         const rank = sortedPos.findIndex(p => p.sym === topupSym);
@@ -1405,7 +1626,8 @@ async function main() {
         const amt = Math.floor(buyUsd * 1e6);
         if (amt >= Math.floor((MIN_POSITION_VALUE - 0.50) * 1e6)) {
           const liq = await checkLiquidity(USDC_NEAR, target.id, amt.toString());
-          if (!liq) { log(`  ⚠️ ${topupSym} no buy route`); }
+          if (liq === false) { log(`  ⚠️ ${topupSym} no buy route`); }
+          else if (liq === null) { log(`  ⚠️ ${topupSym} buy route check failed (network error), skipping`); }
           else {
             log(`Top up ${topupSym} $${buyUsd.toFixed(2)} (room to $${(room + pos.value).toFixed(2)})...`);
             const r = await execSwap({ id: USDC_NEAR, sym: 'USDC', dec: 6 }, target, amt.toString(), env.pk, assets);
@@ -1445,29 +1667,40 @@ async function main() {
   if (action !== 'HOLD' && ok && canExec) {
     hasPositions = bals.filter(b => b.human > 0 || b.sym === 'USDC');
     pricedPositions = hasPositions.map(h => {
-      const p = h.sym === 'USDC' ? 1 : (assets[h.sym]?.p || 0);
-      return { ...h, price: p, value: p * h.human, score: h.sym === 'USDC' ? 0 : (assets[h.sym]?.sc || 0), ch: assets[h.sym]?.ch, rsi: rsis[h.sym] };
+      const p = assetPrice(h.sym);
+      return { ...h, price: p, value: p * h.human, score: h.sym === 'USDC' ? 0 : (assets[h.sym]?.sc || 0), ch: assets[h.sym]?.ch, rsi: rsis[h.sym], mom: moms[h.sym], vol: vols[h.sym], e: ems[h.sym] };
     });
   }
 
   // Portfolio summary + P&L (excludes frozen and native NEAR)
   const fundTotal = pricedPositions.filter(p => !frozenSyms.has(p.sym)).reduce((s, p) => s + p.value, 0);
 
-  // Auto-detect external deposits only once (no deposits file yet)
-  let depFileExists = true;
-  try { fs.accessSync(DEPOSITS_FILE); } catch(e) { depFileExists = false; }
-  if (!depFileExists && !tradedThisCycle) {
-    let historyForDep = [];
-    try { historyForDep = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')); } catch(e) {}
-    if (!Array.isArray(historyForDep)) historyForDep = [];
-    const lastDep = historyForDep.length > 0 ? historyForDep[historyForDep.length - 1] : null;
-    const prevUSDC = lastDep?.pos?.find(p => p.s === 'USDC')?.q || 0;
-    const curUSDC = usdcBal?.human || 0;
-    const usdcIncrease = curUSDC - prevUSDC;
-    if (usdcIncrease > 1.50) {
+  // Auto-detect external deposits (unexplained USDC increases)
+  let historyForDep = [];
+  try { historyForDep = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')); } catch(e) {}
+  if (!Array.isArray(historyForDep)) historyForDep = [];
+  const lastDep = historyForDep.length > 0 ? historyForDep[historyForDep.length - 1] : null;
+  const prevUSDC = lastDep?.pos?.find(p => p.s === 'USDC')?.q || 0;
+  const curUSDC = usdcBal?.human || 0;
+  const usdcIncrease = curUSDC - prevUSDC;
+  // Check if the USDC increase matches a non-USDC value drop (manual sale, not deposit)
+  const prevNonUsdcVal = (lastDep?.pos || []).filter(p => p.s !== 'USDC').reduce((s, p) => s + p.v, 0);
+  const curNonUsdcVal = pricedPositions.filter(p => p.sym !== 'USDC' && !frozenSyms.has(p.sym)).reduce((s, p) => s + p.value, 0);
+  const nonUsdcDrop = prevNonUsdcVal - curNonUsdcVal;
+  if (usdcIncrease > 1.50 && !tradedThisCycle) {
+    if (nonUsdcDrop > usdcIncrease * 0.5) {
+      log(`  USDC +\$${usdcIncrease.toFixed(2)} matches non-USDC -\$${nonUsdcDrop.toFixed(2)} — not a deposit`);
+    } else {
       totalDeposits += usdcIncrease;
       try { fs.writeFileSync(DEPOSITS_FILE, JSON.stringify({ total: totalDeposits })); } catch(e) {}
       log(`  Detected deposit: $${usdcIncrease.toFixed(2)} → total deposits: $${totalDeposits.toFixed(2)}`);
+      try {
+        let dh = [];
+        try { dh = JSON.parse(fs.readFileSync(DEPOSIT_HISTORY_FILE, 'utf8')); } catch(e) {}
+        if (!Array.isArray(dh)) dh = [];
+        dh.push({ t: new Date().toISOString(), amount: usdcIncrease, reason: 'external deposit' });
+        fs.writeFileSync(DEPOSIT_HISTORY_FILE, JSON.stringify(dh));
+      } catch(e) {}
     }
   }
 
@@ -1564,7 +1797,7 @@ async function main() {
   log(`  Daily: ${dailyPerfStr} (${dailyPerfPctStr}%) | Weekly: ${weeklyPerfStr} (${weeklyPerfPctStr}%) | Monthly: ${monthlyPerfStr} (${monthlyPerfPctStr}%) | Fees: $${accruedFees.toFixed(2)} | Perf: $${perf.toFixed(2)}`);
   if (totalDeposits > 0) log(`  Deposited: $${totalDeposits.toFixed(2)}`);
   if (nearBal > 0.01) {
-    const nearPx = assets['wNEAR']?.p || 0;
+    const nearPx = assetPrice('wNEAR');
     log('── Gas ──');
     log(`  ${nearBal.toFixed(3)} NEAR ($${(nearBal * nearPx).toFixed(2)})`);
   }
@@ -1576,6 +1809,55 @@ async function main() {
     }
   }
   log('── ─────── ──');
+
+  // Research log — append snapshot each run
+  try {
+    const fgLabel = typeof fg === 'object' && fg !== null ? `${fg.v}` : '?';
+    const fgText = typeof fg === 'object' && fg !== null ? `${fg.t}` : '?';
+    const research = {
+      t: new Date().toISOString(),
+      fg: fgLabel,
+      fgc: fgText,
+      goldChg,
+      downCount,
+      routes: routeInv ? routeInv.size : 0,
+      top: ranked.slice(0, 15).map(a => ({
+        sym: a.sym, p: a.p, ch: a.ch, sc: a.sc, rsi: a.r, mom: a.m, vol: a.v, ema: a.e, pd: a.d, mc: a.mc
+      })),
+      portfolio: {
+        total: pricedPositions.reduce((s, p) => s + p.value, 0),
+        pos: pricedPositions.filter(p => p.value > 0.01).map(p => {
+          const cb = costBasis[p.sym];
+          return {
+            sym: p.sym, qty: p.human, val: p.value,
+            cost: cb ? cb.cost : null,
+            score: p.score, rsi: p.rsi, mom: p.mom, ema: p.e, pd: p.d
+          };
+        })
+      },
+      frozen: frozenPositions.length > 0 ? frozenPositions.map(p => ({ sym: p.sym, qty: p.human, val: p.value })) : undefined,
+      nearBal,
+      decision: action,
+      reason
+    };
+    let rl = [];
+    try { rl = JSON.parse(fs.readFileSync(RESEARCH_FILE, 'utf8')); } catch(e) {}
+    if (!Array.isArray(rl)) rl = [];
+    rl.push(research);
+    fs.writeFileSync(RESEARCH_FILE, JSON.stringify(rl));
+  } catch(e) { log('Research log err:', e.message); }
+
+  // Route health log
+  if (routeHealth.length > 0) {
+    try {
+      const ts = new Date().toISOString();
+      let rh = [];
+      try { rh = JSON.parse(fs.readFileSync(ROUTE_HEALTH_FILE, 'utf8')); } catch(e) {}
+      if (!Array.isArray(rh)) rh = [];
+      for (const e of routeHealth) rh.push({ ...e, t: ts });
+      fs.writeFileSync(ROUTE_HEALTH_FILE, JSON.stringify(rh));
+    } catch(e) { log('Route health err:', e.message); }
+  }
 
   log('=== DONE ===');
 }

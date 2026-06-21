@@ -1,6 +1,9 @@
 const https = require('https');
 const fs = require('fs');
 
+const MOM_CACHE_FILE = __dirname + '/.ohlc_cache.json';
+const deepseek = require('./lib/deepseek.js');
+
 const UA = 'Mozilla/5.0 OpenCode-Trading-Screener/1.0';
 
 const cg = (path) => new Promise((resolve, reject) => {
@@ -14,6 +17,27 @@ const cg = (path) => new Promise((resolve, reject) => {
     });
   }).on('error', reject);
 });
+
+async function fetchIntraday(id) {
+  const cacheKey = `intra_${id}_${new Date().toISOString().slice(0, 10)}`;
+  try {
+    const cache = JSON.parse(fs.readFileSync(MOM_CACHE_FILE, 'utf8'));
+    if (cache[cacheKey]) return cache[cacheKey];
+  } catch(e) {}
+  try {
+    const d = await cg('/api/v3/coins/' + id + '/market_chart?vs_currency=usd&days=1');
+    const prices = Array.isArray(d?.prices) ? d.prices.map(p => p[1]).filter(p => p > 0) : null;
+    if (prices && prices.length >= 36) {
+      try {
+        let cache = {};
+        try { cache = JSON.parse(fs.readFileSync(MOM_CACHE_FILE, 'utf8')); } catch(e) {}
+        cache[cacheKey] = prices;
+        fs.writeFileSync(MOM_CACHE_FILE, JSON.stringify(cache));
+      } catch(e) {}
+    }
+    return prices;
+  } catch(e) { return null; }
+}
 
 const yf = (symbol, range = '1mo') => new Promise((resolve, reject) => {
   https.get('https://query1.finance.yahoo.com/v8/finance/chart/' + symbol + '?interval=1d&range=' + range, { headers: { 'User-Agent': UA } }, res => {
@@ -37,31 +61,33 @@ const ONDO = {
 
 function loadRouteInventory() {
   try {
-    const raw = JSON.parse(fs.readFileSync('/home/jbz/code/trading/.route_inventory.json', 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(__dirname + '/.route_inventory.json', 'utf8'));
     return new Set(raw.tradable);
   } catch(e) { return new Set(); }
 }
 
 function loadCostBasis() {
   try {
-    return JSON.parse(fs.readFileSync('/home/jbz/code/trading/.cost_basis.json', 'utf8'));
+    return JSON.parse(fs.readFileSync(__dirname + '/.cost_basis.json', 'utf8'));
   } catch(e) { return {}; }
 }
 
 function loadPortfolioHistory() {
   try {
-    const hist = JSON.parse(fs.readFileSync('/home/jbz/code/trading/portfolio_history.json', 'utf8'));
+    const hist = JSON.parse(fs.readFileSync(__dirname + '/portfolio_history.json', 'utf8'));
     return hist.length > 0 ? hist[hist.length - 1] : null;
   } catch(e) { return null; }
 }
 
 function buildHoldings(costBasis, latestSnapshot) {
   const holdings = {};
-  for (const [sym, cb] of Object.entries(costBasis)) {
-    const pos = latestSnapshot?.pos?.find(p => p.s === sym);
-    holdings[sym] = {
-      amount: pos ? pos.q : cb.qty,
-      buyPrice: cb.cost / cb.qty,
+  if (!latestSnapshot?.pos) return holdings;
+  for (const pos of latestSnapshot.pos) {
+    if (pos.q <= 0 || pos.v < 0.50) continue;
+    const cb = costBasis[pos.s];
+    holdings[pos.s] = {
+      amount: pos.q,
+      buyPrice: cb ? cb.cost / cb.qty : null,
       chain: 'near'
     };
   }
@@ -101,6 +127,20 @@ function computeRSI(closes) {
   return 100 - (100 / (1 + rs));
 }
 
+function intradayMom(prices) {
+  if (!prices || prices.length < 36) return null;
+  const last12 = prices.slice(-12);
+  const prev24 = prices.slice(-36, -12);
+  const recent = last12.reduce((s, p) => s + p, 0) / last12.length;
+  const prev = prev24.reduce((s, p) => s + p, 0) / prev24.length;
+  const pct = ((recent - prev) / prev) * 100;
+  if (pct > 2) return 2;
+  if (pct > 0.5) return 1;
+  if (pct < -2) return -2;
+  if (pct < -0.5) return -1;
+  return 0;
+}
+
 async function main() {
   let fg = '?', fgc = '?';
   try {
@@ -123,7 +163,7 @@ async function main() {
     const cached = require('fs').existsSync('./coinList.json') ? require('./coinList.json') : null;
     if (cached && cached.length) { coinList = cached; } else {
       coinList = await cg('/api/v3/coins/list');
-      require('fs').writeFileSync('/home/jbz/code/trading/coinList.json', JSON.stringify(coinList));
+      require('fs').writeFileSync(__dirname + '/coinList.json', JSON.stringify(coinList));
     }
   } catch(e) { console.error('CoinGecko list failed:', e.message); return; }
 
@@ -213,6 +253,7 @@ async function main() {
   console.log('-'.repeat(105));
 
   const rsiMap = {};
+  const momMap = {};
 
   for (const r of allResults.slice(0, 8)) {
     if (r._closes && r._closes.length >= 15) {
@@ -220,12 +261,21 @@ async function main() {
       if (closes.length < 15) { continue; }
       const rsi = computeRSI(closes);
       if (rsi === null) continue;
+      const info = symMap[r.symbol];
+      let mom = null;
+      if (info) {
+        const prices = await fetchIntraday(info.id);
+        if (prices) mom = intradayMom(prices);
+      }
+      momMap[r.symbol] = mom;
+      rsiMap[r.symbol] = rsi;
       const dir = r.change24h > 0 ? '+' + r.change24h.toFixed(1) + '%' : r.change24h.toFixed(1) + '%';
       const sig = rsi > 70 ? 'OVERBOUGHT' : rsi < 30 ? 'OVERSOLD' : 'neutral';
-      rsiMap[r.symbol] = rsi;
-      console.log(r.symbol.padEnd(9) + ' $' + r.price.toFixed(2).padStart(12) + '  RSI(14): ' + rsi.toFixed(1).padStart(6) + '  ' + dir.padStart(8) + '  ' + sig);
+      const momStr = mom !== null ? ' MOM:' + (mom >= 0 ? '+' : '') + mom : '';
+      console.log(r.symbol.padEnd(9) + ' $' + r.price.toFixed(2).padStart(12) + '  RSI(14): ' + rsi.toFixed(1).padStart(6) + momStr + '  ' + dir.padStart(8) + '  ' + sig);
     } else {
       let closes = [];
+      let info = null;
       if (r.type === 'stock') {
         const yfSym = ONDO[r.symbol];
         if (!yfSym) { continue; }
@@ -236,7 +286,7 @@ async function main() {
         } catch(e) { continue; }
         await sleep(1000);
       } else {
-        const info = symMap[r.symbol];
+        info = symMap[r.symbol];
         if (!info) { continue; }
         try {
           let chart;
@@ -252,10 +302,17 @@ async function main() {
       if (closes.length < 15) { continue; }
       const rsi = computeRSI(closes);
       if (rsi === null) continue;
+      let mom = null;
+      if (info) {
+        const prices = await fetchIntraday(info.id);
+        if (prices) mom = intradayMom(prices);
+      }
+      momMap[r.symbol] = mom;
+      rsiMap[r.symbol] = rsi;
       const dir = r.change24h > 0 ? '+' + r.change24h.toFixed(1) + '%' : r.change24h.toFixed(1) + '%';
       const sig = rsi > 70 ? 'OVERBOUGHT' : rsi < 30 ? 'OVERSOLD' : 'neutral';
-      rsiMap[r.symbol] = rsi;
-      console.log(r.symbol.padEnd(9) + ' $' + (r.price > 100 ? r.price.toFixed(2) : r.price.toFixed(6)).toString().padStart(12) + '  RSI(14): ' + rsi.toFixed(1).padStart(6) + '  ' + dir.padStart(8) + '  ' + sig);
+      const momStr = mom !== null ? ' MOM:' + (mom >= 0 ? '+' : '') + mom : '';
+      console.log(r.symbol.padEnd(9) + ' $' + (r.price > 100 ? r.price.toFixed(2) : r.price.toFixed(6)).toString().padStart(12) + '  RSI(14): ' + rsi.toFixed(1).padStart(6) + momStr + '  ' + dir.padStart(8) + '  ' + sig);
     }
   }
 
@@ -275,10 +332,12 @@ async function main() {
     swingCandidates.forEach((r, i) => {
       const ch = r.change24h >= 0 ? '+' : '';
       const rsiStr = rsiMap[r.symbol] !== undefined ? rsiMap[r.symbol].toFixed(1) : '  --';
+      const mom = momMap[r.symbol];
+      const momStr = mom !== undefined && mom !== null ? ' MOM:' + (mom >= 0 ? '+' : '') + mom : '';
       const volStr = r.volume24h >= 1e9 ? (r.volume24h/1e9).toFixed(1)+'B' : r.volume24h >= 1e6 ? (r.volume24h/1e6).toFixed(0)+'M' : (r.volume24h/1e3).toFixed(0)+'K';
       const pStr = r.price >= 100 ? r.price.toFixed(2) : r.price >= 1 ? r.price.toFixed(4) : r.price.toFixed(8);
       const routeTag = r.tradable ? 'YES' : 'no';
-      console.log('  ' + (i+1).toString().padEnd(2) + r.symbol.padEnd(9) + ' $' + pStr.padStart(14) + '  ' + ch + r.change24h.toFixed(2).padStart(7) + '%  RSI ' + rsiStr.padStart(6) + '  score ' + r.score.toString().padStart(2) + '  vol ' + volStr.padStart(8) + '  route:' + routeTag);
+      console.log('  ' + (i+1).toString().padEnd(2) + r.symbol.padEnd(9) + ' $' + pStr.padStart(14) + '  ' + ch + r.change24h.toFixed(2).padStart(7) + '%  RSI ' + rsiStr.padStart(6) + momStr + '  score ' + r.score.toString().padStart(2) + '  vol ' + volStr.padStart(8) + '  route:' + routeTag);
     });
   }
 
@@ -333,34 +392,43 @@ async function main() {
       }
       const value = current.price * h.amount;
       totalValue += value;
-      const pnlPct = ((current.price - h.buyPrice) / h.buyPrice) * 100;
-      const pnlUsd = (current.price - h.buyPrice) * h.amount;
-      const pnlStr = pnlPct >= 0 ? '+' + pnlPct.toFixed(2) + '%' : pnlPct.toFixed(2) + '%';
-      const valueStr = '$' + value.toFixed(4);
-      const usdStr = pnlUsd >= 0 ? '+$' + pnlUsd.toFixed(4) : '-$' + Math.abs(pnlUsd).toFixed(4);
       const amtStr = h.amount >= 1 ? h.amount.toFixed(2) : h.amount.toFixed(4);
 
-      let signal = 'HOLD';
-      let reason = '';
+      let pnlStr, usdStr, signal, reason;
+      if (h.buyPrice === null || h.buyPrice <= 0) {
+        pnlStr = '    —';
+        usdStr = '    —';
+        signal = 'HOLD';
+        reason = '';
+      } else {
+        const pnlPct = ((current.price - h.buyPrice) / h.buyPrice) * 100;
+        const pnlUsd = (current.price - h.buyPrice) * h.amount;
+        pnlStr = pnlPct >= 0 ? '+' + pnlPct.toFixed(2) + '%' : pnlPct.toFixed(2) + '%';
+        usdStr = pnlUsd >= 0 ? '+$' + pnlUsd.toFixed(4) : '-$' + Math.abs(pnlUsd).toFixed(4);
+        signal = 'HOLD';
+        reason = '';
 
-      if (marketRiskOff) {
-        signal = 'SELL';
-        reason = 'risk-off: broad market selloff, gold down, extreme fear';
-      } else if (pnlPct < -10) {
-        signal = 'SELL';
-        reason = 'stop loss: ' + pnlPct.toFixed(1) + '%';
-      } else if (pnlPct < 0 && current.score < -2) {
-        signal = 'SELL';
-        reason = 'negative momentum (score=' + current.score + ')';
-      } else if (pnlPct < -5) {
-        signal = 'WATCH';
-        reason = 'approaching stop loss at -10%';
+        if (marketRiskOff) {
+          signal = 'SELL';
+          reason = 'risk-off: broad market selloff, gold down, extreme fear';
+        } else if (pnlPct < -10) {
+          signal = 'SELL';
+          reason = 'stop loss: ' + pnlPct.toFixed(1) + '%';
+        } else if (pnlPct < 0 && current.score < -2) {
+          signal = 'SELL';
+          reason = 'negative momentum (score=' + current.score + ')';
+        } else if (pnlPct < -5) {
+          signal = 'WATCH';
+          reason = 'approaching stop loss at -10%';
+        }
       }
 
       if (signal !== 'HOLD') anySellSignal = true;
 
+      const mom = momMap[sym];
+      const momStr = mom !== undefined && mom !== null ? ' MOM:' + (mom >= 0 ? '+' : '') + mom : '';
       const sigColors = signal === 'SELL' ? 'SELL' : signal === 'WATCH' ? 'WATCH' : 'HOLD';
-      console.log('  ' + sym.padEnd(9) + amtStr.padStart(8) + ' $' + current.price.toFixed(4).padStart(7) + ' ' + valueStr.padStart(9) + ' ' + pnlStr.padStart(9) + ' ' + usdStr.padStart(8) + '  ' + sigColors.padEnd(5) + ' ' + reason);
+      console.log('  ' + sym.padEnd(9) + amtStr.padStart(8) + ' $' + current.price.toFixed(4).padStart(7) + ' $' + value.toFixed(4).padStart(8) + ' ' + pnlStr.padStart(9) + ' ' + usdStr.padStart(8) + momStr + '  ' + sigColors.padEnd(5) + ' ' + reason);
     }
 
     console.log('  ' + '-'.repeat(70));
@@ -394,6 +462,25 @@ async function main() {
           }
         }
       }
+    }
+  }
+
+  // AI commentary
+  if (deepseek.hasKey()) {
+    const top3 = allResults.slice(0, 3).map(r => `${r.symbol}(${r.score}, ${r.change24h >= 0 ? '+' : ''}${r.change24h.toFixed(1)}%)`).join(', ');
+    const portfolio = Object.keys(HOLDINGS).length > 0
+      ? Object.entries(HOLDINGS).map(([s, h]) => `${s} $${(h.amount * 0).toFixed(0)}`).join(', ')
+      : 'empty';
+    const msg = [
+      { role: 'system', content: 'You are a crypto market analyst. Give a brief 2-sentence summary of the current market state based on the data provided. Be concise, factual, and highlight the most notable movers.' },
+      { role: 'user', content: `Market: Fear & Greed ${fg}/100 (${fgc}). Top 3: ${top3}. Portfolio: ${portfolio}.` },
+    ];
+    const reply = await deepseek.chat(msg, { maxTokens: 150 });
+    if (reply) {
+      console.log('\n' + '='.repeat(105));
+      console.log('  AI MARKET SUMMARY');
+      console.log('='.repeat(105));
+      console.log(`  ${reply}`);
     }
   }
 }
