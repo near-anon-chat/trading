@@ -1,60 +1,39 @@
-# TODO
+# Evening Reflection — June 28
 
-## Pump Detection (NPRO-style vertical moves)
+## Done Today
 
-### Problem
-NPRO does vertical pumps (+85%) and crashes back down within hours.
-We need to detect:
-1. **When a pump starts** — buy signal
-2. **When a pump ends / crash starts** — sell signal
+### Candidate finder + tryBuy alignment
+- **Problem:** Candidate finder accepted `pumpStart`/`earlyPump` tokens (sc≥3), but `tryBuy` rejected them at a stricter gate — 58ms silent skip, no log.
+- **Fix (initial):** Removed `pumpStart`/`earlyPump` from candidate finder gates to match tryBuy.
+- **Reversal (final):** Reinstated both, widened tryBuy's first gate to accept them, and added `accumulationBuyable()` for VOL>2x + EMA=+1 + ch>3% + sc≥4 entries. Decision and execution now consistent.
 
-### Current data (already available)
+### Silent skip logging
+- **Problem:** `tryBuy()` returned false without logging why — RHEA (sc=3, earlyPump) silently rejected in 58ms.
+- **Fix:** Broke compound gates into individual logged checks (`not buyable`, `fails quality gate`, `recently raised`, `already held`, `not in portfolio`, `insufficient USDC`, `amount too small`).
 
-| Metric | What it shows | Useful for |
-|--------|---------------|------------|
-| `VOL` | Volatility ratio (e.g. 3.9x) | Detects abnormal movement |
-| `EMA` | 15-min vs 30-min direction (-2 to +2) | Detects short-term direction change |
-| `PD` | Distance from 24h high (%, negative = below peak) | Shows position in the pump cycle |
-| `MOM` | 1h vs 2h direction (-2 to +2) | Broader trend confirmation |
-| `RSI` | 14-day RSI | Overbought/oversold context |
+### Fallback scan removed
+- **Problem:** Every cycle iterated all ranked tokens (~hundreds) with silent `continue`s.
+- **Fix:** Removed. Candidate finder already identified the best token — tryBuy either works or doesn't. No point re-scanning everything.
 
-### Observed NPRO pattern
+### Pump peak sell trigger
+- **New trigger:** Positions bought via `pumpStart`/`earlyPump` (tracked via `costBasis.pumpEntry`) sold when PD ≥ -1% — peak reached, pump exhausted.
+- TURBO example: bought at PD=-50%, climbs to PD=-0.5% → immediate sell.
 
-```
-Phase         PD     EMA    VOL   MOM   RSI   Action
----------------------------------------------------------
-Bottom       -43%   +0     low   -1    40    wait
-Pump start   -30%   +2     4x    +2    50    BUY
-Mid pump     -10%   +2     4x    +2    70    HOLD
-Peak          -0%   +2/+0  4x    +2    84    SELL (or wait for confirmation)
-Crash start   -3%   -2     4x    +2    86    SELL immediately
-Free fall    -20%   -2     3x    +1    80    wait for recovery
-Bottom       -43%   -1     low   -1    50    possible re-entry
-```
+### Accumulation entry path
+- **New function `accumulationBuyable()`:** VOL>2x + EMA=+1 + ch>3% + sc≥4, bypasses MOM/VS gates.
+- **Allocation:** 25% partial position (same as momentum entries).
 
-### Detection rules (to implement)
+### Divergence display
+- `assetMetrics`: top 10 with columns aligned (`padEnd(10)`) + `DG=YES/NO` on every line.
+- `topList`: top 3 compact with `DG=YES/NO`.
+- `posStr`: portfolio positions include `DG=YES/NO` (except USDC).
 
-**Pump start signal (BUY):**
-- `VOL > 2.5` (abnormal volatility)
-- `EMA === +2` (vertical up in last 15 min)
-- `PD < -10` (still well below peak — room to run)
-- `RSI < 85` (not overbought)
-- Score >= 5
+### DeepSeek prompts
+- Divergence already passed in BUY/SELL vetting prompts.
+- System prompt updated to explain divergence weighting.
 
-**Pump end / crash signal (SELL):**
-- `PD > -2` (at or near peak)
-- `VOL > 3` (extreme volatility)
-- `EMA` switches from `+2` to `0` or `-1` (momentum dying)
-- `RSI > 80` (overbought context)
+## Open Questions
 
-**Emergency crash sell (SELL immediately):**
-- `PD > -5` (near peak)
-- `EMA` drops from `+2` to `-2` in one cycle (direct reversal)
-- Trigger sell regardless of other indicators
-
-### Implementation
-
-In `agent.js`:
-1. Add `pumpStart` detection logic in the candidate/buy section
-2. Add `pumpEnd` and `crash` sell triggers in the sell section
-3. Add `PD` and `VOL` to already fetched intraday data (done)
+1. **`accumulationBuyable()` — VOL threshold?** Currently >2x. TURBO had 1.5x. Lower to 1.5x?
+2. **Pump peak sell — PD threshold?** Currently ≥ -1%. Another value?
+3. **AI advisor system prompt** — Should the accumulation entry rule be added to the buy vetting prompt?

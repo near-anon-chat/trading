@@ -10,8 +10,8 @@
 ## Config
 - `opencode.jsonc` — MCP server: `@iqai/mcp-near-intent-swaps`
 - `~/.config/near-cli/config.toml` — RPC: `archival-rpc.mainnet.near.org` (aggressive rate limiting!)
-- JWT token in `~/.bashrc` line 146 (env var: `NEAR_SWAP_JWT_TOKEN`)
-- Also used as `X-API-Key` for solver-relay-v2
+- JWT token in `.env` (env var: `NEAR_SWAP_JWT_TOKEN`) — also used as `X-API-Key` for solver-relay-v2
+- **Jun 25 bugfix:** `buildRouteInventory()` used `MIN_POSITION_VALUE * 1e6` for sell amounts regardless of token decimals — sent 2e-12 VVV instead of $2 worth. Fixed to use `10 ** t.dec` per token. Route inventory went from **2 → 61 tradable**.
 
 ## Rate Limiting
 - NEAR CLI uses `archival-rpc.mainnet.near.org` — rate limits after ~3-4 calls
@@ -224,13 +224,14 @@ The 1Click `submit-intent` endpoint will accept incorrect signatures (old ad-hoc
 
 # Current Portfolio
 
-| Asset | Location | Raw Balance | Decimals | Human Amount | USD Price | Value |
-|-------|----------|-------------|----------|-------------|-----------|-------|
-| VVV | intents | `561888000000000000` | 18 | 0.562 VVV | $17.52 | $9.84 |
-| OP | intents | `65130002194256999999` | 18 | 65.13 OP | $0.11 | $7.17 |
-| NEAR | wallet | ~1.467 | 24 | 1.467 NEAR | $2.04 | $2.99 |
-| AAVE | intents | `7439101673240000000` | 18 | 0.0744 AAVE | $66.97 | $4.99 |
-| **Total** | | | | | | **~$24.99** |
+| Asset | Location | Human Amount | USD Price | Value |
+|-------|----------|-------------|-----------|-------|
+| USDC | intents | 18.63 USDC | $1.00 | $18.63 |
+| SAFE | intents | 71.69 SAFE | $0.086 | $6.18 |
+| NEAR | wallet | ~1.446 | $1.86 | $2.69 |
+| MON | intents | 0.0048 MON | — | ~$0.00 |
+| INX | intents | 0.021 INX | — | ~$0.00 |
+| **Total** | | | | **~$27.50** |
 
 ## Token IDs
 - wNEAR: `nep141:wrap.near` (24 decimals)
@@ -245,20 +246,13 @@ The 1Click `submit-intent` endpoint will accept incorrect signatures (old ad-hoc
 - APT (Aptos): `nep141:aptos.omft.near` (8 decimals)
 - OP (Optimism): `nep245:v2_1.omni.hot.tg:10_vLAiSt9KfUGKpw5cD3vsSyNYBo7` (18 decimals)
 - USDC (NEAR): `nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1` (6 decimals)
-- USDC (NEAR): `nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1` (6 decimals)
 - USDT0 (Plasma): `nep141:plasma-0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb.omft.near`
 - MELANIA: `nep141:sol-d600e625449a4d9380eaf5e3265e54c90d34e260.omft.near` ❌
 - XAUT: `nep141:eth-0x68749665ff8d2d112fa859aa293f07a622782f38.omft.near` ❌
 
-## Swappable Tokens (confirmed working via INTENTS)
-- VVV (Base) ✅ — score 7, RSI 79 (overbought), good volume
-- INX (Ethereum) ✅ — score requires checking
-- AURORA (NEAR) ✅ — native NEP-141
-- wNEAR (NEAR) ✅ — native NEP-141
-- BERA (Berachain) ✅
-- KAITO (Base) ✅ — score 3, RSI ~55, neutral, swing candidate
-- APT (Aptos) ✅ — score 3, RSI ~59, neutral
-- OP (Optimism) ✅ — score 7, +12.5%, strong momentum
+## Swappable Tokens — 61 tokens with active routes (auto-discovered)
+All tokens with both buy + sell routes via 1Click API. Includes VVV, OP, AAVE, KAITO, APT, AURORA, INX, SPX, BERA, MON, XPL, XAUT, and 49 more.
+Run `node agent.js` to refresh; cache in `.route_inventory.json`.
 
 ---
 
@@ -317,8 +311,19 @@ The screener is in `screener.js` — reads `tokens.json` and `coinList.json` for
 
 Runs every **5 minutes** via cron. Monitors market + portfolio and executes swaps when conditions trigger.
 
-## Status: Monitor-only (no swaps executed)
-Agent checks every 5 min but doesn't trade yet. Enable execution by adding JWT to `.env`.
+## Status: Live (swap execution enabled)
+Agent checks every 5 min and trades when conditions trigger. JWT is set in `.env`.
+
+## Bugfixes — June 28
+1. **TOPUP sc gate + throttle**: TOPUP now requires `sc >= 5` (was 3) plus a 1-hour cooldown per position (`topup_throttle.json`). Tokens with `sc < 7` also need VOL > 1.0x OR MOM > 0 OR EMA >= 0 — prevents topping up dead-volume positions.
+2. **CG cache persistence**: `fetchCGData()` now persists to `.cg_cache.json` on disk. Survives process restart. On stale/failed CG API calls, falls back to file cache.
+3. **Rotation target quality check**: Before executing a ROTATE, the rotation target is sanity-checked: for `sc < 7`, must have VOL > 1.0x OR MOM > 0 OR EMA >= 0. Failed checks set `buyBest = null`, triggering the USDC fallback.
+4. **ROTATE-to-USDC fallback**: When ROTATE is triggered but no quality target found, the agent sells the weakest position to USDC instead of leaving capital in a dud. Prevents "stuck in weak position" scenario.
+5. **CG fetch always tries live API first**: File cache was returned before live API call, causing 30-min stale data windows. Now live API is always attempted first; file cache is fallback only on API failure.
+6. **`_httpPost` non-200 reject reverted**: Was rejecting on any non-200 HTTP status, but 1Click quote API returns HTTP 400 for "no route" tokens as valid business response. Reverted to resolving with `{s, d}` regardless of status.
+7. **Deposit auto-detection disabled**: Too many false positives from frozen fund recoveries. `deposits.json` set manually to $17.47 (real external deposits: $7.33 initial + $10.14 later deposit).
+8. **Junk sell timer countdown**: Active junk timers logged every cycle with human-readable remaining time (e.g., `⏳ SAFE junk sell in ~4:32 (sc=3)`).
+9. **`validateSell` system prompt updated**: Junk sells (sc < 5, trigger #2) explicitly flagged as HARD MECHANICAL RULE — AI always approves unless extraordinary circumstances.
 
 ## Decision Logic
 ```

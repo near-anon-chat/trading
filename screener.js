@@ -20,23 +20,29 @@ const cg = (path) => new Promise((resolve, reject) => {
 
 async function fetchIntraday(id) {
   const cacheKey = `intra_${id}_${new Date().toISOString().slice(0, 10)}`;
+  const FRESH_MS = 10 * 60 * 1000;
   try {
     const cache = JSON.parse(fs.readFileSync(MOM_CACHE_FILE, 'utf8'));
-    if (cache[cacheKey]) return cache[cacheKey];
+    if (cache[cacheKey]) {
+      const c = cache[cacheKey];
+      if (Array.isArray(c)) return { prices: c, volumes: null };
+      if (c.ts && Date.now() - c.ts < FRESH_MS) return { prices: c.p || null, volumes: c.v || null };
+    }
   } catch(e) {}
   try {
     const d = await cg('/api/v3/coins/' + id + '/market_chart?vs_currency=usd&days=1');
     const prices = Array.isArray(d?.prices) ? d.prices.map(p => p[1]).filter(p => p > 0) : null;
+    const volumes = Array.isArray(d?.total_volumes) ? d.total_volumes.map(v => v[1]).filter(v => v > 0) : null;
     if (prices && prices.length >= 36) {
       try {
         let cache = {};
         try { cache = JSON.parse(fs.readFileSync(MOM_CACHE_FILE, 'utf8')); } catch(e) {}
-        cache[cacheKey] = prices;
+        cache[cacheKey] = { p: prices, v: volumes, ts: Date.now() };
         fs.writeFileSync(MOM_CACHE_FILE, JSON.stringify(cache));
       } catch(e) {}
     }
-    return prices;
-  } catch(e) { return null; }
+    return { prices, volumes };
+  } catch(e) { return { prices: null, volumes: null }; }
 }
 
 const yf = (symbol, range = '1mo') => new Promise((resolve, reject) => {
@@ -128,7 +134,7 @@ function computeRSI(closes) {
 }
 
 function intradayMom(prices) {
-  if (!prices || prices.length < 36) return null;
+  if (!Array.isArray(prices) || prices.length < 36) return null;
   const last12 = prices.slice(-12);
   const prev24 = prices.slice(-36, -12);
   const recent = last12.reduce((s, p) => s + p, 0) / last12.length;
@@ -139,6 +145,51 @@ function intradayMom(prices) {
   if (pct < -2) return -2;
   if (pct < -0.5) return -1;
   return 0;
+}
+
+function volRatio(prices) {
+  if (!Array.isArray(prices) || prices.length < 24) return null;
+  const last = prices.slice(-12);
+  const prev = prices.slice(-24, -12);
+  const avgMove = arr => {
+    let sum = 0;
+    for (let i = 1; i < arr.length; i++) sum += Math.abs(arr[i] - arr[i - 1]) / (arr[i - 1] || 0.0001);
+    return sum / (arr.length - 1);
+  };
+  const aL = avgMove(last), aP = avgMove(prev);
+  if (aP === 0) return null;
+  return aL / aP;
+}
+
+function volActualRatio(volumes) {
+  if (!Array.isArray(volumes) || volumes.length < 24) return null;
+  const last = volumes.slice(-12);
+  const prev = volumes.slice(-24, -12);
+  const avg = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
+  const aL = avg(last), aP = avg(prev);
+  if (aP === 0) return null;
+  return aL / aP;
+}
+
+function ema(prices) {
+  if (!Array.isArray(prices) || prices.length < 9) return null;
+  const last3 = prices.slice(-3);
+  const prev6 = prices.slice(-9, -3);
+  const recent = last3.reduce((s, p) => s + p, 0) / 3;
+  const prior = prev6.reduce((s, p) => s + p, 0) / 6;
+  const pct = ((recent - prior) / prior) * 100;
+  if (pct < -3) return -2;
+  if (pct < -1) return -1;
+  if (pct > 3) return 2;
+  if (pct > 1) return 1;
+  return 0;
+}
+
+function peakDist(prices) {
+  if (!Array.isArray(prices) || prices.length < 10) return null;
+  const high = Math.max(...prices);
+  const cur = prices[prices.length - 1];
+  return ((cur - high) / high) * 100;
 }
 
 async function main() {
@@ -254,6 +305,10 @@ async function main() {
 
   const rsiMap = {};
   const momMap = {};
+  const volMap = {};
+  const emMap = {};
+  const pdMap = {};
+  const vsMap = {};
 
   for (const r of allResults.slice(0, 8)) {
     if (r._closes && r._closes.length >= 15) {
@@ -262,17 +317,30 @@ async function main() {
       const rsi = computeRSI(closes);
       if (rsi === null) continue;
       const info = symMap[r.symbol];
-      let mom = null;
+      let mom = null, vol = null, em = null, pd = null, volActual = null;
       if (info) {
-        const prices = await fetchIntraday(info.id);
-        if (prices) mom = intradayMom(prices);
+        const { prices, volumes } = await fetchIntraday(info.id);
+        if (prices) { mom = intradayMom(prices); vol = volRatio(prices); em = ema(prices); pd = peakDist(prices); }
+        if (volumes) volActual = volActualRatio(volumes);
       }
       momMap[r.symbol] = mom;
       rsiMap[r.symbol] = rsi;
-      const dir = r.change24h > 0 ? '+' + r.change24h.toFixed(1) + '%' : r.change24h.toFixed(1) + '%';
-      const sig = rsi > 70 ? 'OVERBOUGHT' : rsi < 30 ? 'OVERSOLD' : 'neutral';
-      const momStr = mom !== null ? ' MOM:' + (mom >= 0 ? '+' : '') + mom : '';
-      console.log(r.symbol.padEnd(9) + ' $' + r.price.toFixed(2).padStart(12) + '  RSI(14): ' + rsi.toFixed(1).padStart(6) + momStr + '  ' + dir.padStart(8) + '  ' + sig);
+      volMap[r.symbol] = vol;
+      emMap[r.symbol] = em;
+      pdMap[r.symbol] = pd;
+      vsMap[r.symbol] = volActual;
+      const pStr = r.price >= 100 ? r.price.toFixed(2) : (r.price >= 1 ? r.price.toFixed(4) : r.price.toFixed(8));
+      const scStr = `sc=${r.score}`.padEnd(6);
+      const rsiStr = `RSI=${rsi.toFixed(0)}`.padEnd(6);
+      const momStr = mom !== null ? `MOM:${mom >= 0 ? '+' : ''}${mom}`.padEnd(6) : '       ';
+      const volIcon = vol !== null ? (vol > 3 ? '🔥' : vol > 2 ? '⚡' : '  ') : '';
+      const volStr = vol !== null ? (volIcon + `VOL:${vol.toFixed(1)}x`).padEnd(10) : '          ';
+      const tvolIcon = volActual !== null ? (volActual > 3 ? '🔥' : volActual > 2 ? '⚡' : '  ') : '';
+      const tvolStr = volActual !== null ? (tvolIcon + `TV:${volActual.toFixed(1)}x`).padEnd(10) : '          ';
+      const emaIcon = em !== null ? (em === -2 ? '💀' : em === 2 ? '🚀' : em === -1 ? '📉' : em === 1 ? '📈' : '  ') : '';
+      const emaStr = em !== null ? (emaIcon + `EMA:${em >= 0 ? '+' : ''}${em}`).padEnd(8) : '        ';
+      const pdStr = pd !== null ? `PD:${pd.toFixed(1)}%` : '';
+      console.log(`  ${r.symbol.padEnd(11)} ${scStr} $${pStr.padStart(10)}  ${(r.change24h >= 0 ? '+' : '') + r.change24h.toFixed(1).padStart(6)}%  ${rsiStr} ${momStr} ${volStr} ${tvolStr} ${emaStr} ${pdStr}`);
     } else {
       let closes = [];
       let info = null;
@@ -302,17 +370,30 @@ async function main() {
       if (closes.length < 15) { continue; }
       const rsi = computeRSI(closes);
       if (rsi === null) continue;
-      let mom = null;
+      let mom = null, vol = null, em = null, pd = null, volActual = null;
       if (info) {
-        const prices = await fetchIntraday(info.id);
-        if (prices) mom = intradayMom(prices);
+        const { prices, volumes } = await fetchIntraday(info.id);
+        if (prices) { mom = intradayMom(prices); vol = volRatio(prices); em = ema(prices); pd = peakDist(prices); }
+        if (volumes) volActual = volActualRatio(volumes);
       }
       momMap[r.symbol] = mom;
       rsiMap[r.symbol] = rsi;
-      const dir = r.change24h > 0 ? '+' + r.change24h.toFixed(1) + '%' : r.change24h.toFixed(1) + '%';
-      const sig = rsi > 70 ? 'OVERBOUGHT' : rsi < 30 ? 'OVERSOLD' : 'neutral';
-      const momStr = mom !== null ? ' MOM:' + (mom >= 0 ? '+' : '') + mom : '';
-      console.log(r.symbol.padEnd(9) + ' $' + (r.price > 100 ? r.price.toFixed(2) : r.price.toFixed(6)).toString().padStart(12) + '  RSI(14): ' + rsi.toFixed(1).padStart(6) + momStr + '  ' + dir.padStart(8) + '  ' + sig);
+      volMap[r.symbol] = vol;
+      emMap[r.symbol] = em;
+      pdMap[r.symbol] = pd;
+      vsMap[r.symbol] = volActual;
+      const pStr = r.price >= 100 ? r.price.toFixed(2) : (r.price >= 1 ? r.price.toFixed(4) : r.price.toFixed(8));
+      const scStr = `sc=${r.score}`.padEnd(6);
+      const rsiStr = `RSI=${rsi.toFixed(0)}`.padEnd(6);
+      const momStr = mom !== null ? `MOM:${mom >= 0 ? '+' : ''}${mom}`.padEnd(6) : '       ';
+      const volIcon = vol !== null ? (vol > 3 ? '🔥' : vol > 2 ? '⚡' : '  ') : '';
+      const volStr = vol !== null ? (volIcon + `VOL:${vol.toFixed(1)}x`).padEnd(10) : '          ';
+      const tvolIcon = volActual !== null ? (volActual > 3 ? '🔥' : volActual > 2 ? '⚡' : '  ') : '';
+      const tvolStr = volActual !== null ? (tvolIcon + `TV:${volActual.toFixed(1)}x`).padEnd(10) : '          ';
+      const emaIcon = em !== null ? (em === -2 ? '💀' : em === 2 ? '🚀' : em === -1 ? '📉' : em === 1 ? '📈' : '  ') : '';
+      const emaStr = em !== null ? (emaIcon + `EMA:${em >= 0 ? '+' : ''}${em}`).padEnd(8) : '        ';
+      const pdStr = pd !== null ? `PD:${pd.toFixed(1)}%` : '';
+      console.log(`  ${r.symbol.padEnd(11)} ${scStr} $${pStr.padStart(10)}  ${(r.change24h >= 0 ? '+' : '') + r.change24h.toFixed(1).padStart(6)}%  ${rsiStr} ${momStr} ${volStr} ${tvolStr} ${emaStr} ${pdStr}`);
     }
   }
 
@@ -467,15 +548,28 @@ async function main() {
 
   // AI commentary
   if (deepseek.hasKey()) {
-    const top3 = allResults.slice(0, 3).map(r => `${r.symbol}(${r.score}, ${r.change24h >= 0 ? '+' : ''}${r.change24h.toFixed(1)}%)`).join(', ');
+    const top3 = allResults.slice(0, 3).map(r => {
+      const s = r.symbol;
+      const parts = [];
+      if (rsiMap[s] != null) parts.push(`RSI=${rsiMap[s].toFixed(0)}`);
+      if (momMap[s] != null) parts.push(`MOM=${momMap[s] >= 0 ? '+' : ''}${momMap[s]}`);
+      if (volMap[s] != null) parts.push(`VOL=${volMap[s].toFixed(1)}x`);
+      if (vsMap[s] != null) parts.push(`VS=${vsMap[s].toFixed(1)}x`);
+      if (emMap[s] != null) parts.push(`EMA=${emMap[s] >= 0 ? '+' : ''}${emMap[s]}`);
+      if (pdMap[s] != null) parts.push(`PD=${pdMap[s].toFixed(1)}%`);
+      return `${s}(sc=${r.score}, ${r.change24h >= 0 ? '+' : ''}${r.change24h.toFixed(1)}%, ${parts.join(', ')})`;
+    }).join('; ');
     const portfolio = Object.keys(HOLDINGS).length > 0
-      ? Object.entries(HOLDINGS).map(([s, h]) => `${s} $${(h.amount * 0).toFixed(0)}`).join(', ')
+      ? Object.entries(HOLDINGS).map(([s, h]) => {
+          const px = allResults.find(r => r.symbol === s)?.price || 1;
+          return `${s} $${(h.amount * px).toFixed(2)}`;
+        }).join(', ')
       : 'empty';
     const msg = [
-      { role: 'system', content: 'You are a crypto market analyst. Give a brief 2-sentence summary of the current market state based on the data provided. Be concise, factual, and highlight the most notable movers.' },
+      { role: 'system', content: 'You are a crypto market analyst and trading advisor. Give a brief 2-3 sentence assessment: market state (notable movers, trends) plus a specific actionable recommendation (buy, sell, or hold) based on the data provided. Be concise and factual. VOL=price volatility (price swings), VS=actual trading volume spike.' },
       { role: 'user', content: `Market: Fear & Greed ${fg}/100 (${fgc}). Top 3: ${top3}. Portfolio: ${portfolio}.` },
     ];
-    const reply = await deepseek.chat(msg, { maxTokens: 150 });
+    const reply = await deepseek.chat(msg, { maxTokens: 200 });
     if (reply) {
       console.log('\n' + '='.repeat(105));
       console.log('  AI MARKET SUMMARY');

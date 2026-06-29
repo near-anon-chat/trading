@@ -24,7 +24,7 @@ const RAISED_SYMS_FILE = path.join(PROJECT, '.raised_syms.json');
 const MAX_POSITIONS = 3;
 const MIN_POSITION_VALUE = 2.0;
 const HOLD_MIN_MS = 60 * 60 * 1000;
-const MAX_SPREAD_PCT = 4.0;
+const MAX_SPREAD_PCT = 2.0;
 
 const FLAP_COOLDOWN_MS = 30 * 60 * 1000;   // route-flap penalty duration
 const FLAP_FILE = path.join(PROJECT, '.route_flap.json');
@@ -48,6 +48,13 @@ const JUNK_HOLD_MS = 30 * 60 * 1000;
 const JUNK_FILE = path.join(PROJECT, '.junk_timers.json');
 const OB_HOLD_MS = 30 * 60 * 1000;
 const OB_FILE = path.join(PROJECT, '.ob_timers.json');
+const TRADE_HISTORY_FILE = path.join(PROJECT, '.trade_history.json');
+const MAX_TRADE_HISTORY = 20;
+const REBUY_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+const MAX_DAILY_TRADES = 6;
+const TOPUP_SCORE_MIN = 5;
+const TOPUP_THROTTLE_FILE = path.join(PROJECT, '.topup_throttle.json');
+const TOPUP_THROTTLE_MS = 60 * 60 * 1000;
 
 // Tier allocation: 80/20 for 1 position, 60/40 for 2, 60/25/15 for 3+
 function tierPct(rank, total) {
@@ -125,7 +132,11 @@ const CG_OVERRIDES = {
   ONT: 'ontology', VET: 'vechain', THETA: 'theta-token',
   TFUEL: 'theta-fuel', HOT: 'holotoken', CHZ: 'chiliz',
   AUDIO: 'audius', GALA: 'gala', RNDR: 'render-token',
-  IMX: 'immutable-x', APE: 'apecoin', BLUR: 'blur',
+  IMX: 'immutable-x', APE: 'apecoin', BLUR: 'blur', TRUMP: 'official-trump',
+  WBTC: 'wrapped-bitcoin', wBTC: 'wrapped-bitcoin', WETH: 'weth',
+  POL: 'polygon-ecosystem-token', MOVE: 'movement',
+  USDT: 'tether', TURBO: 'turbo', SAFE: 'safe', MOG: 'mog-coin',
+  CFI: 'consumerfi-protocol', USDT0: 'usdt0', xBTC: 'xbtc-2', COW: 'cow-protocol',
 };
 for (const [sym, id] of Object.entries(CG_OVERRIDES)) { CG_IDS[sym] = id; }
 // Additional fallbacks for tokens not in coinList.json
@@ -191,7 +202,10 @@ function _httpPost(url, data, hdrs = {}) {
     const req = m.request(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...hdrs } }, r => {
       let d = '';
       r.on('data', c => d += c);
-      r.on('end', () => { try { res({ s: r.statusCode, d: JSON.parse(d) }); } catch(e) { res({ s: r.statusCode, d }); } });
+      r.on('end', () => {
+        if (r.statusCode === 429) rej(new Error('RATE_LIMITED'));
+        else { try { res({ s: r.statusCode, d: JSON.parse(d) }); } catch(e) { rej(new Error(d.slice(0, 200))); } }
+      });
     });
     req.on('error', rej);
     req.write(b);
@@ -203,8 +217,9 @@ async function httpPost(url, data, hdrs = {}) {
   for (let i = 0; i < 3; i++) {
     try { return await _httpPost(url, data, hdrs); }
     catch(e) {
-      if (i < 2 && (e.message?.includes('EAI_AGAIN') || e.message?.includes('ECONNRESET') || e.message?.includes('ETIMEDOUT'))) {
-        await sleep(2000); continue;
+      if (i < 2) {
+        if (e.message?.includes('RATE_LIMITED')) { await sleep(5000); continue; }
+        if (e.message?.includes('EAI_AGAIN') || e.message?.includes('ECONNRESET') || e.message?.includes('ETIMEDOUT')) { await sleep(2000); continue; }
       }
       throw e;
     }
@@ -221,6 +236,7 @@ async function fetchFG() {
 }
 
 const CG_CACHE_TTL = 60 * 1000;
+const CG_CACHE_FILE = path.join(PROJECT, '.cg_cache.json');
 let cgCache = { data: null, ts: 0 };
 
 async function fetchCGData(ids) {
@@ -228,16 +244,25 @@ async function fetchCGData(ids) {
   if (cgCache.data && now - cgCache.ts < CG_CACHE_TTL) {
     return cgCache.data;
   }
+  // Preload file cache as cold-start backup
+  if (!cgCache.data) {
+    try {
+      const fc = JSON.parse(fs.readFileSync(CG_CACHE_FILE, 'utf8'));
+      if (fc.data) cgCache = { data: fc.data, ts: fc.ts };
+    } catch(e) {}
+  }
   if (!ids.length) return {};
+  // Always try live API first; file cache is fallback only
   try {
     const r = await httpGet(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true&include_market_cap=true`);
     log('CG prices:', Object.keys(r).join(','));
     cgCache = { data: r, ts: now };
+    try { fs.writeFileSync(CG_CACHE_FILE, JSON.stringify({ data: r, ts: now })); } catch(e) {}
     return r;
   } catch(e) {
     log('CG price err:', e.message);
-    if (cgCache.data) {
-      log('  Using cached CG prices');
+    if (cgCache.data && now - cgCache.ts < CG_CACHE_TTL * 30) {
+      log('  Using cached CG prices (' + Math.round((now - cgCache.ts) / 1000) + 's stale)');
       return cgCache.data;
     }
     return {};
@@ -281,23 +306,36 @@ async function fetchOHLC(id) {
 
 async function fetchIntraday(id) {
   const cacheKey = `intra_${id}_${new Date().toISOString().slice(0, 10)}`;
+  const FRESH_MS = 20 * 60 * 1000;
+  let staleEntry = null;
   try {
     const cache = JSON.parse(fs.readFileSync(OHLC_CACHE_FILE, 'utf8'));
-    if (cache[cacheKey]) return { prices: cache[cacheKey], fromCache: true };
+    const c = cache[cacheKey];
+    if (c) {
+      if (Array.isArray(c)) return { prices: c, volumes: null, fromCache: true };
+      if (c.ts && Date.now() - c.ts < FRESH_MS) {
+        if (c.v !== undefined) return { prices: c.p || null, volumes: c.v || null, fromCache: true };
+      }
+      staleEntry = c;
+    }
   } catch(e) {}
   try {
     const d = await httpGet(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=1`);
     const prices = Array.isArray(d?.prices) ? d.prices.map(p => p[1]).filter(p => p > 0) : null;
+    const volumes = Array.isArray(d?.total_volumes) ? d.total_volumes.map(p => p[1]).filter(v => v > 0) : null;
     if (prices && prices.length >= 36) {
       try {
         let cache = {};
         try { cache = JSON.parse(fs.readFileSync(OHLC_CACHE_FILE, 'utf8')); } catch(e) {}
-        cache[cacheKey] = prices;
+        cache[cacheKey] = { p: prices, v: volumes, ts: Date.now() };
         fs.writeFileSync(OHLC_CACHE_FILE, JSON.stringify(cache));
       } catch(e) {}
     }
-    return { prices, fromCache: false };
-  } catch(e) { return { prices: null, fromCache: false }; }
+    return { prices, volumes, fromCache: false };
+  } catch(e) {
+    if (staleEntry) return { prices: staleEntry.p || null, volumes: staleEntry.v || null, fromCache: true };
+    return { prices: null, volumes: null, fromCache: false };
+  }
 }
 
 function rsi(closes) {
@@ -310,8 +348,30 @@ function rsi(closes) {
   return 100 - 100 / (1 + ag / al);
 }
 
+function detectBullishDivergence(prices, lookbackHours = 6) {
+  if (!prices || prices.length < 48) return false;
+  const step = Math.max(1, Math.floor(prices.length / 24));
+  const sampled = [];
+  for (let i = 0; i < prices.length; i += step) sampled.push(prices[i]);
+  if (sampled.length < 14 + lookbackHours) return false;
+  const rsiSeries = [];
+  for (let i = 14; i < sampled.length; i++)
+    rsiSeries.push(rsi(sampled.slice(i - 14, i + 1)));
+  const p = sampled.slice(-lookbackHours);
+  const r = rsiSeries.slice(-lookbackHours);
+  let priceLow = Infinity, priceLowIdx = -1;
+  for (let i = 0; i < p.length; i++) {
+    if (p[i] < priceLow) { priceLow = p[i]; priceLowIdx = i; }
+  }
+  let rsiLow = Infinity, rsiLowIdx = -1;
+  for (let i = 0; i < r.length; i++) {
+    if (r[i] < rsiLow) { rsiLow = r[i]; rsiLowIdx = i; }
+  }
+  return priceLowIdx > rsiLowIdx && r[priceLowIdx] > rsiLow;
+}
+
 function intradayMom(prices) {
-  if (!prices || prices.length < 36) return null;
+  if (!Array.isArray(prices) || prices.length < 36) return null;
   const last12 = prices.slice(-12);
   const prev24 = prices.slice(-36, -12);
   const recent = last12.reduce((s, p) => s + p, 0) / last12.length;
@@ -325,7 +385,7 @@ function intradayMom(prices) {
 }
 
 function volRatio(prices) {
-  if (!prices || prices.length < 24) return null;
+  if (!Array.isArray(prices) || prices.length < 24) return null;
   const last = prices.slice(-12);
   const prev = prices.slice(-24, -12);
   const avgMove = arr => {
@@ -339,7 +399,7 @@ function volRatio(prices) {
 }
 
 function ema(prices) {
-  if (!prices || prices.length < 9) return null;
+  if (!Array.isArray(prices) || prices.length < 9) return null;
   const last3 = prices.slice(-3);
   const prev6 = prices.slice(-9, -3);
   const recent = last3.reduce((s, p) => s + p, 0) / 3;
@@ -353,7 +413,7 @@ function ema(prices) {
 }
 
 function peakDist(prices, sym) {
-  if (!prices || prices.length < 10) return null;
+  if (!Array.isArray(prices) || prices.length < 10) return null;
   const cur = prices[prices.length - 1];
   const high = Math.max(...prices);
   const peaker = loadPeakTracker();
@@ -361,6 +421,14 @@ function peakDist(prices, sym) {
   if (high > prev) { peaker[sym] = high; savePeakTracker(peaker); }
   const truePeak = Math.max(high, prev);
   return ((cur - truePeak) / truePeak) * 100;
+}
+
+function volSpike(prices, volumes) {
+  if (!Array.isArray(prices) || !Array.isArray(volumes) || prices.length < 24 || volumes.length < 24) return null;
+  const last3 = volumes.slice(-3).reduce((s, v) => s + v, 0) / 3;
+  const prev9 = volumes.slice(-12, -3).reduce((s, v) => s + v, 0) / 9;
+  if (prev9 <= 0) return null;
+  return last3 / prev9;
 }
 
 function score(chg, vol, type) {
@@ -460,6 +528,17 @@ async function execSwap(from, to, amount, pk, prices) {
     const qAmtIn = qr.d.quote.amountIn || amount;
     const qAmtOut = qr.d.quote.amountOut || '0';
 
+    if (spreadPct === 0 && prices) {
+      const pIn2 = from.sym === 'USDC' ? 1 : (prices[from.sym]?.p || 0);
+      const pOut2 = to.sym === 'USDC' ? 1 : (prices[to.sym]?.p || 0);
+      const inUSD2 = Number(qAmtIn) / 10 ** from.dec * pIn2;
+      const outUSD2 = Number(qAmtOut) / 10 ** to.dec * pOut2;
+      if (inUSD2 > 0) {
+        spreadPct = Math.max(0, (1 - outUSD2 / inUSD2) * 100);
+        log(`  Spread (non-dry fallback): ${spreadPct.toFixed(2)}%`);
+      }
+    }
+
     log(`  Swap ${from.sym}→${to.sym} addr=${da.slice(0, 16)}...`);
 
     const ir = await httpPost('https://1click.chaindefuser.com/v0/generate-intent', {
@@ -518,7 +597,7 @@ async function checkLiquidity(fromId, toId, rawAmount) {
   if (!jwt) return false;
   try {
     const dl = new Date(Date.now() + 86400000).toISOString().replace(/\.\d+Z/, '.000Z');
-    const r = await httpPost('https://1click.chaindefuser.com/v0/quote', {
+    const body = {
       dry: true, swapType: 'EXACT_INPUT', depositMode: 'SIMPLE',
       originAsset: fromId, destinationAsset: toId,
       amount: rawAmount,
@@ -526,8 +605,13 @@ async function checkLiquidity(fromId, toId, rawAmount) {
       recipient: ACCOUNT, recipientType: 'INTENTS',
       refundTo: ACCOUNT, refundType: 'INTENTS',
       depositType: 'INTENTS', deadline: dl,
-    }, { 'Authorization': `Bearer ${jwt}` });
-    return r.d?.quote?.amountOut != null;
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = await httpPost('https://1click.chaindefuser.com/v0/quote', body, { 'Authorization': `Bearer ${jwt}` });
+      if (r.d?.quote?.amountOut != null) return true;
+      if (attempt === 0) await sleep(2000);
+    }
+    return false;
   } catch(e) { return null; } // null = network error
 }
 
@@ -576,6 +660,76 @@ function canTrade() {
   return true;
 }
 function markTrade() { try { fs.writeFileSync(LAST_TRADE, Date.now().toString()); } catch(e) {} }
+
+function loadTradeHistory() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(TRADE_HISTORY_FILE, 'utf8'));
+    return Array.isArray(raw) ? raw : [];
+  } catch(e) { return []; }
+}
+function saveTradeHistory(trades) {
+  try { fs.writeFileSync(TRADE_HISTORY_FILE, JSON.stringify(trades)); } catch(e) {}
+}
+function recordTrade(type, sym, usd, pnl, pnlPct, reason, score) {
+  const trades = loadTradeHistory();
+  trades.push({ ts: Date.now(), type, sym, usd: usd || 0, pnl, pnlPct, reason: reason || '', score: score ?? null });
+  saveTradeHistory(trades);
+}
+function recentlySold(sym) {
+  const trades = loadTradeHistory();
+  for (let i = trades.length - 1; i >= 0; i--) {
+    if (trades[i].sym === sym) return trades[i].type === 'SELL' && Date.now() - trades[i].ts < REBUY_COOLDOWN_MS;
+  }
+  return false;
+}
+
+function buyable(a, failedTokens, routeInv) {
+  if (!a || !failedTokens || !routeInv) return false;
+  if (a.sc == null || a.sc < 5) return false;
+  if (failedTokens.has(a.sym) || !routeInv.has(a.sym) || recentlySold(a.sym)) return false;
+  if (a.sc < 6) {
+    if (a.vs == null || a.vs < 1.5) return false;
+    if (a.m == null || a.m <= 0) return false;
+  }
+  if (a.r != null && a.r >= 80) return false;
+  if (a.sc < 7) {
+    if (a.v == null || a.v < 1.0) return false;
+    if (a.r != null && a.r >= 70) return false;
+  }
+  return true;
+}
+
+function divergenceBuyable(a, failedTokens, routeInv) {
+  if (!a || !failedTokens || !routeInv) return false;
+  if (!a.dg || a.sc == null || a.sc < 5) return false;
+  if (failedTokens.has(a.sym) || !routeInv.has(a.sym) || recentlySold(a.sym)) return false;
+  if (a.v == null || a.v <= 2) return false;
+  if (a.e == null || a.e < 0) return false;
+  if (a.r != null && a.r >= 80) return false;
+  return true;
+}
+
+function momentumBuyable(a, failedTokens, routeInv) {
+  if (!a || !failedTokens || !routeInv) return false;
+  if (failedTokens.has(a.sym) || !routeInv.has(a.sym) || recentlySold(a.sym)) return false;
+  if (a.sc == null || a.sc < 4) return false;
+  if (a.m == null || a.m <= 0) return false;
+  if (a.v == null || a.v < 1) return false;
+  if (a.e == null || a.e < 0) return false;
+  if (a.r != null && a.r >= 80) return false;
+  return true;
+}
+
+function accumulationBuyable(a, failedTokens, routeInv) {
+  if (!a || !failedTokens || !routeInv) return false;
+  if (failedTokens.has(a.sym) || !routeInv.has(a.sym) || recentlySold(a.sym)) return false;
+  if (a.sc == null || a.sc < 4) return false;
+  if (a.v == null || a.v <= 2) return false;
+  if (a.e == null || a.e < 1) return false;
+  if (a.ch == null || a.ch <= 3) return false;
+  if (a.r != null && a.r >= 80) return false;
+  return true;
+}
 
 function loadRaisedSyms() {
   try {
@@ -628,6 +782,35 @@ function saveFlapSyms(syms) {
     if (now - v > FLAP_COOLDOWN_MS) delete syms[k];
   }
   try { fs.writeFileSync(FLAP_FILE, JSON.stringify(syms)); } catch(e) {}
+}
+
+const TP_STATE_FILE = path.join(PROJECT, '.tp_state.json');
+function loadTpState() {
+  try { return JSON.parse(fs.readFileSync(TP_STATE_FILE, 'utf8')); } catch(e) { return {}; }
+}
+function saveTpState(st) {
+  try { fs.writeFileSync(TP_STATE_FILE, JSON.stringify(st)); } catch(e) {}
+}
+
+async function validateSell(sym, reason, position, fg, portfolio, holdStartMap) {
+  if (!deepseek.hasKey()) return true;
+  const tradeHistory = loadTradeHistory();
+  const recentTrades = tradeHistory.slice(-10).map(t => 
+    `${t.type} ${t.sym} ${t.usd > 0 ? '$' + Math.round(t.usd).toString() : ''}${t.pnl !== undefined && t.pnl !== null ? ' (' + (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(1) + ')' : ''}`
+  ).join(', ');
+  const holdMs = position?.sym && holdStartMap[position.sym] ? Date.now() - holdStartMap[position.sym] : -1;
+  const holdStr = holdMs >= 0 ? Math.round(holdMs / 60000) + 'min' : '?';
+  const costBasisLocal = loadCostBasis();
+  const cbSym = position?.sym ? costBasisLocal[position.sym] : null;
+  const pnlStr = cbSym?.cost > 0 && position?.value > 0 ? ((position.value - cbSym.cost) / cbSym.cost * 100).toFixed(1) + '%' : '?';
+  const aiMsg = [
+    { role: 'system', content: 'You are a crypto trading assistant. Validate whether SELLING the given token is a good idea. Sell triggers: (1) overbought (RSI>92), (2) low score (<4) — JUNK SELL: triggered after a 30-min timer expires. The AI may approve or reject. If rejected, the timer resets for another 30 min — only reject if the token shows genuine recovery potential (e.g., score improved, momentum turned positive, market conditions changed), (3) sharp drop (MOM=-2), (4) volatile drop (VOL>3x+MOM<0 or VS>3x+price drop), (5) EMA crash (EMA=-2), (6) pump end, (7) emergency crash, (8) risk-off (F&G<30+broad red), (9) rotation (replace weakest), (10) raise USDC (sell to buy better), (11) rotation upgrade: selling an underperforming position (sc<4 OR (VOL<1.0x AND MOM≤0)) to fund a momentum/breakout entry (target VOL>1.5x, MOM>0, EMA≥0) is VALID even if held <2h because dead-volume opportunity cost outweighs the spread, (12) take-profit: staged TP system sells 1/3 at RSI>75 (tier1), 1/3 at RSI>82 (tier2), and all at RSI>92 (tier3). TIER1 AND TIER2 ARE MECHANICAL RISK-MANAGEMENT RULES — approve unless extraordinary circumstances (e.g., token just entered a strong breakout with VOL>2.0x and MOM>0 and price breaking out to new highs). You keep 2/3 of the position after tier1/tier2, so there is still upside exposure. Rejecting TP sells causes positions to be held until they turn junk and lose all profit — this is the main failure pattern to avoid. Low-volume overbought rallies (VOL<1.0x, MOM>0) should STILL be sold — taking partial profit on a low-volume pump is correct risk management. DIVERGENCE RULE: If divergence=YES (bullish divergence), consider HOLDING longer unless other sell signals are overwhelming. If divergence=NO and price is stalling (MOM=0, RSI declining), take profit. VOL=price volatility (price swings), VS=actual trading volume spike. Avoid churn: selling recently-bought tokens early wastes spread. Reply ONLY "YES" or "NO" + brief reason.' },
+    { role: 'user', content: `F&G ${fg?.v ?? '?'}/100 ${fg?.t ?? '?'}. SELL ${sym} (${reason}, sc=${position?.score ?? '?'}, RSI=${position?.rsi ?? '?'}, MOM=${position?.mom ?? '?'}, EMA=${position?.e ?? '?'}, VOL=${position?.vol != null ? position.vol.toFixed(1) + 'x' : '?'}, VS=${position?.vs != null ? position.vs.toFixed(1) + 'x' : '?'}, PD=${position?.d ?? '?'}%, P&L=${pnlStr}, held=${holdStr}, divergence=${position?.dg ? 'YES' : 'NO'}). Portfolio: ${(portfolio || []).filter(p => p.value > 0.01).map(p => `${p.sym}=$${p.value.toFixed(0)}`).join(', ') || 'empty'}. Recent trades: ${recentTrades || 'none'}.` },
+  ];
+  const aiReply = await deepseek.chat(aiMsg, { maxTokens: 100, temperature: 0.1 });
+  if (aiReply) log(`  🤖 DS: ${aiReply}`);
+  if (aiReply?.startsWith('NO')) return false;
+  return true;
 }
 
 function loadFailCooldown() {
@@ -683,6 +866,17 @@ function saveObTimers(timers) {
   try { fs.writeFileSync(OB_FILE, JSON.stringify(timers)); } catch(e) {}
 }
 
+function loadTopupThrottle() {
+  try { return JSON.parse(fs.readFileSync(TOPUP_THROTTLE_FILE, 'utf8')); } catch(e) { return {}; }
+}
+function saveTopupThrottle(th) {
+  const now = Date.now();
+  for (const [k, v] of Object.entries(th)) {
+    if (now - v >= TOPUP_THROTTLE_MS) delete th[k];
+  }
+  try { fs.writeFileSync(TOPUP_THROTTLE_FILE, JSON.stringify(th)); } catch(e) {}
+}
+
 const ROUTE_INVENTORY_FILE = path.join(PROJECT, '.route_inventory.json');
 const ROUTE_INVENTORY_TTL = 30 * 60 * 1000;
 
@@ -702,25 +896,26 @@ async function buildRouteInventory(portfolio, jwt, routeHealth) {
   const tradable = new Set(['USDC', 'wNEAR']);
   for (const t of portfolio) {
     if (tradable.has(t.sym)) continue;
-    const rawAmt = Math.floor(MIN_POSITION_VALUE * 1e6).toString();
+    const buyAmt = Math.floor(MIN_POSITION_VALUE * 1e6).toString();
+    const sellAmt = Math.floor(MIN_POSITION_VALUE * 10 ** t.dec).toString();
     let buyOk = false, sellOk = false, note = '';
     try {
       const dl = new Date(Date.now() + 86400000).toISOString().replace(/\.\d+Z/, '.000Z');
       const buyR = await httpPost('https://1click.chaindefuser.com/v0/quote', {
         dry: true, swapType: 'EXACT_INPUT', depositMode: 'SIMPLE',
         originAsset: USDC_NEAR, destinationAsset: t.id,
-        amount: rawAmt, slippageTolerance: 100,
+        amount: buyAmt, slippageTolerance: 100,
         recipient: ACCOUNT, recipientType: 'INTENTS',
         refundTo: ACCOUNT, refundType: 'INTENTS',
         depositType: 'INTENTS', deadline: dl,
       }, { 'Authorization': `Bearer ${jwt}` });
       buyOk = buyR.d?.quote?.amountOut != null;
-      if (!buyOk) { note = buyR.d?.error || 'no buy route'; await sleep(200); if (routeHealth) routeHealth.push({ t: t.sym, buy: buyOk, sell: sellOk, note }); continue; }
-      await sleep(200);
+      if (!buyOk) { note = buyR.d?.error || 'no buy route'; await sleep(1000); if (routeHealth) routeHealth.push({ t: t.sym, buy: buyOk, sell: sellOk, note }); continue; }
+      await sleep(1000);
       const sellR = await httpPost('https://1click.chaindefuser.com/v0/quote', {
         dry: true, swapType: 'EXACT_INPUT', depositMode: 'SIMPLE',
         originAsset: t.id, destinationAsset: USDC_NEAR,
-        amount: rawAmt, slippageTolerance: 100,
+        amount: sellAmt, slippageTolerance: 100,
         recipient: ACCOUNT, recipientType: 'INTENTS',
         refundTo: ACCOUNT, refundType: 'INTENTS',
         depositType: 'INTENTS', deadline: dl,
@@ -728,7 +923,7 @@ async function buildRouteInventory(portfolio, jwt, routeHealth) {
       sellOk = sellR.d?.quote?.amountOut != null;
       if (!sellOk) note = sellR.d?.error || 'no sell route';
       if (sellOk) tradable.add(t.sym);
-      await sleep(200);
+      await sleep(1000);
     } catch(e) { note = e.message?.slice(0, 50) || 'error'; }
     if (routeHealth) routeHealth.push({ t: t.sym, buy: buyOk, sell: sellOk, note });
   }
@@ -770,24 +965,36 @@ async function main() {
     if (unknown.length > 0) {
       const batch = unknown.slice(0, 3);
       for (const t of batch) {
-        const rawAmt = Math.floor(MIN_POSITION_VALUE * 1e6).toString();
+        const buyAmt = Math.floor(MIN_POSITION_VALUE * 1e6).toString();
+        const sellAmt = Math.floor(MIN_POSITION_VALUE * 10 ** t.dec).toString();
         try {
           const dl = new Date(Date.now() + 86400000).toISOString().replace(/\.\d+Z/, '.000Z');
           const r = await httpPost('https://1click.chaindefuser.com/v0/quote', {
             dry: true, swapType: 'EXACT_INPUT', depositMode: 'SIMPLE',
             originAsset: USDC_NEAR, destinationAsset: t.id,
-            amount: rawAmt, slippageTolerance: 100,
+            amount: buyAmt, slippageTolerance: 100,
             recipient: ACCOUNT, recipientType: 'INTENTS',
             refundTo: ACCOUNT, refundType: 'INTENTS',
             depositType: 'INTENTS', deadline: dl,
           }, { 'Authorization': `Bearer ${env.jwt}` });
           if (r.d?.quote?.amountOut != null) {
-            log(`  ✅ ${t.sym} route discovered!`);
-            logRouteChange(t.sym, 'discovered');
-            routeInv.add(t.sym);
+            await sleep(1000);
+            const s = await httpPost('https://1click.chaindefuser.com/v0/quote', {
+              dry: true, swapType: 'EXACT_INPUT', depositMode: 'SIMPLE',
+              originAsset: t.id, destinationAsset: USDC_NEAR,
+              amount: sellAmt, slippageTolerance: 100,
+              recipient: ACCOUNT, recipientType: 'INTENTS',
+              refundTo: ACCOUNT, refundType: 'INTENTS',
+              depositType: 'INTENTS', deadline: dl,
+            }, { 'Authorization': `Bearer ${env.jwt}` });
+            if (s.d?.quote?.amountOut != null) {
+              log(`  ✅ ${t.sym} route discovered!`);
+              logRouteChange(t.sym, 'discovered');
+              routeInv.add(t.sym);
+            }
           }
         } catch(e) {}
-        await sleep(200);
+        await sleep(1000);
       }
       saveRouteInventoryCache(routeInv);
     }
@@ -801,6 +1008,7 @@ async function main() {
   const [cgData, clickPrices] = await Promise.all([fetchCGData(allCgIds), fetch1ClickPrices()]);
   const hasRealScores = Object.keys(cgData).length > 0;
 
+  const STABLE_SYMS = new Set(['USDC', 'USDT', 'USDT0', 'DAI', 'FRAX', 'USDon', 'USAD']);
   const assets = {};
 
   // Crypto
@@ -813,6 +1021,7 @@ async function main() {
     const vol = cg?.usd_24h_vol ?? 0;
     const mcap = cg?.usd_market_cap ?? 0;
     assets[sym] = { p: price, ch, v: vol, mc: mcap, sc: score(ch, vol, 'c') };
+    if (STABLE_SYMS.has(sym)) assets[sym] = { p: 1, ch: 0, v: 0, mc: 0, sc: 0 };
   }
 
   const healthyPriceData = Object.keys(assets).length >= 30;
@@ -873,7 +1082,7 @@ async function main() {
   for (const sym of [...frozenSyms]) {
     const entry = PORTFOLIO.find(p => p.sym === sym);
     if (!entry || entry.id.startsWith('1cs_v1:')) continue;
-    const raw = Math.floor(MIN_POSITION_VALUE * 1e6).toString();
+    const raw = '1' + '0'.repeat(entry.dec);
     const hasRoute = await checkLiquidity(entry.id, USDC_NEAR, raw);
     if (hasRoute) {
       log(`  ✅ ${sym} route found! Un-freezing`);
@@ -913,16 +1122,23 @@ async function main() {
   const vols = {};
   const ems = {};
   const pds = {};
+  const vss = {};
   // Sequential fetch: held (for OB detection) + top 5 crypto scorers (buy candidates)
   // ETFs score high on stock market days but have no CG IDs — skip them
-  const cryptoScorers = sorted.filter(([sym]) => CG_IDS[sym] && sym !== 'NEAR' && sym !== 'USDC' && routeInv.has(sym)).map(e => e[0]);
-  const rsiPriority = [...new Set([...lastPos, ...cryptoScorers.slice(0, 8)])];
+  const cryptoScorers = sorted.filter(([sym]) => CG_IDS[sym] && sym !== 'NEAR' && !STABLE_SYMS.has(sym) && routeInv.has(sym)).map(e => e[0]);
+  const topDisplaySyms = sorted.filter(([sym]) => routeInv.has(sym) && sym !== 'NEAR').slice(0, 10).map(([sym]) => sym);
+  const topDisplayWithCG = topDisplaySyms.filter(sym => CG_IDS[sym]);
+  const rsiPriority = [...new Set([...lastPos, ...cryptoScorers.slice(0, 10), ...topDisplayWithCG])];
+  const divergences = {};
   for (let i = 0; i < rsiPriority.length; i++) {
     const sym = rsiPriority[i];
     const id = CG_IDS[sym];
-    const [{ closes, fromCache }, { prices }] = await Promise.all([fetchOHLC(id), fetchIntraday(id)]);
+    const [{ closes, fromCache }, { prices, volumes }] = await Promise.all([fetchOHLC(id), fetchIntraday(id)]);
     if (closes) rsis[sym] = rsi(closes);
-    if (prices) { moms[sym] = intradayMom(prices); vols[sym] = volRatio(prices); ems[sym] = ema(prices); pds[sym] = peakDist(prices, sym); }
+    if (prices) {
+      moms[sym] = intradayMom(prices); vols[sym] = volRatio(prices); ems[sym] = ema(prices); pds[sym] = peakDist(prices, sym); vss[sym] = volSpike(prices, volumes);
+      divergences[sym] = detectBullishDivergence(prices, 6);
+    }
     if (!fromCache) await sleep(i === rsiPriority.length - 1 ? 0 : 3000);
   }
   // ETF RSI from stored data
@@ -931,7 +1147,7 @@ async function main() {
   }
 
   // Top assets ranked
-  const ranked = sorted.map(([sym, a]) => ({ sym, ...a, r: rsis[sym], m: moms[sym], v: vols[sym], e: ems[sym], d: pds[sym] }))
+  const ranked = sorted.map(([sym, a]) => ({ sym, ...a, r: rsis[sym], m: moms[sym], v: vols[sym], e: ems[sym], d: pds[sym], vs: vss[sym], dg: divergences[sym] ?? false }))
     .sort((a, b) => {
       if (b.sc !== a.sc) return b.sc - a.sc;
       const mA = a.m, mB = b.m;
@@ -940,17 +1156,24 @@ async function main() {
     });
   const downCount = ranked.slice(0, 15).filter(a => a.ch < 0).length;
 
-  log('Top 8:');
-  ranked.filter(a => routeInv.has(a.sym) && a.sym !== 'NEAR').slice(0, 8).forEach(a => {
+  log('Top 10:');
+  const buyableCount = { count: 0 };
+  ranked.filter(a => routeInv.has(a.sym) && a.sym !== 'NEAR' && !STABLE_SYMS.has(a.sym)).slice(0, 10).forEach(a => {
     const rsiStr = (a.r !== undefined ? `RSI=${a.r.toFixed(0)}` : 'RS--').padEnd(6);
-    const momStr = (a.m !== undefined ? `MOM:${a.m >= 0 ? '+' : ''}${a.m}` : '').padEnd(6);
-    const volIcon = a.v !== undefined && a.v !== null ? (a.v > 3 ? '🔥' : a.v > 2 ? '⚡' : '  ') : '';
-    const volStr = volIcon + (a.v !== undefined && a.v !== null ? `VOL:${a.v.toFixed(1)}x` : '').padEnd(8);
+    const momStr = (a.m !== undefined ? `MOM:${a.m >= 0 ? '+' : ''}${a.m}` : 'MOM:?').padEnd(7);
+    const volIcon = a.v !== undefined && a.v !== null ? (a.v > 3 ? '🔥' : a.v > 2 ? '⚡' : '  ') : '  ';
+    const volStr = volIcon + (a.v !== undefined && a.v !== null ? `VOL:${a.v.toFixed(1)}x` : 'VOL:?x').padEnd(8);
+    const vsIcon = a.vs !== undefined && a.vs !== null ? (a.vs > 3 ? '🔥' : a.vs > 2 ? '⚡' : '  ') : '  ';
+    const vsStr = vsIcon + (a.vs !== undefined && a.vs !== null ? `VS:${a.vs.toFixed(1)}x` : 'VS:?x').padEnd(8);
     const emaIcon = a.e !== undefined && a.e !== null ? (a.e === -2 ? '💀' : a.e === 2 ? '🚀' : a.e === -1 ? '📉' : a.e === 1 ? '📈' : '  ') : '';
     const emaStr = emaIcon + (a.e !== undefined && a.e !== null ? `EMA:${a.e >= 0 ? '+' : ''}${a.e}` : '').padEnd(6);
     const pdStr = a.d !== undefined && a.d !== null ? `PD:${a.d.toFixed(1)}%` : '';
-    log(`  ${a.sym.padEnd(11)} sc=${a.sc}   $${(a.p?.toFixed(4)||'?').padStart(10)}  ${(a.ch?.toFixed(1)||'?').padStart(6)}%  ${rsiStr} ${momStr} ${volStr} ${emaStr} ${pdStr}`);
+    const dgStr = `DG=${a.dg ? 'YES' : 'NO'}`;
+    const isBuyable = buyable(a, failedTokens, routeInv) || divergenceBuyable(a, failedTokens, routeInv);
+    if (isBuyable) buyableCount.count++;
+    log(`  ${a.sym.padEnd(11)} sc=${a.sc}   $${(a.p?.toFixed(4)||'?').padStart(10)}  ${(a.ch?.toFixed(1)||'?').padStart(6)}%  ${rsiStr} ${momStr} ${volStr} ${vsStr} ${emaStr} ${pdStr} ${dgStr} ${isBuyable ? '✅' : '❌'}`);
   });
+  log(`  Buyable: ${buyableCount.count}/10`);
 
   // Portfolio
   let bals = await fetchBals();
@@ -976,15 +1199,19 @@ async function main() {
             const raw = BigInt(Math.floor(cb.qty * 10 ** target.dec)).toString();
             const liq = await checkLiquidity(target.id, USDC_NEAR, raw);
             if (liq) {
+              if (!await validateSell(sym, 'recovery (' + sym + ' stranded)', null, fg, [], {})) { log(`  Skipped recovery (AI rejected)`); continue; }
               const r = await execSwap(target, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, raw, env.pk, assets);
               tradedThisCycle = true;
               if (r?.ok) {
                 const usdcBi = bals.findIndex(b => b.sym === 'USDC');
                 if (usdcBi >= 0 && r.out) bals[usdcBi].human += Number(r.out);
+                const proceeds = Number(r.out || 0);
                 log(`  ✅ Recovered ${sym} → ${r.out} USDC`);
+                recordTrade('SELL', sym, proceeds, proceeds - cb.cost, cb.cost > 0 ? (proceeds - cb.cost) / cb.cost * 100 : 0, 'recovery', null);
                 delete costBasis[sym];
                 delete junkTimers[sym]; delete obTimers[sym];
                 saveCostBasis(costBasis);
+                const tpStRec = loadTpState(); if (tpStRec[sym]) { delete tpStRec[sym]; saveTpState(tpStRec); }
                 markTrade();
               } else {
                 log(`  ❌ Recovery sell failed for ${sym}`);
@@ -1006,8 +1233,20 @@ async function main() {
   const assetPrice = (sym) => sym === 'USDC' ? 1 : (assets[sym]?.p || fallbackPrices[sym] || 0);
   let pricedPositions = hasPositions.map(h => {
     const p = assetPrice(h.sym);
-    return { ...h, price: p, value: p * h.human, score: h.sym === 'USDC' ? 0 : (assets[h.sym]?.sc || 0), ch: assets[h.sym]?.ch, rsi: rsis[h.sym], mom: moms[h.sym], vol: vols[h.sym], e: ems[h.sym] };
+    return { ...h, price: p, value: p * h.human, score: h.sym === 'USDC' ? 0 : (assets[h.sym]?.sc || 0), ch: assets[h.sym]?.ch, rsi: rsis[h.sym], mom: moms[h.sym], vol: vols[h.sym], e: ems[h.sym], d: pds[h.sym], vs: vss[h.sym], dg: divergences[h.sym] ?? false };
   });
+  for (const p of pricedPositions) {
+    const cb = costBasis[p.sym];
+    if (cb && cb.qty > 0 && p.human > 0) {
+      const ratio = p.human / cb.qty;
+      if (ratio > 1.2 || ratio < 0.8) {
+        log(`  ⚠️ ${p.sym} cost basis reset (qty ${cb.qty.toFixed(4)} → ${p.human.toFixed(4)}, cost ${cb.cost.toFixed(2)} → ${p.value.toFixed(2)})`);
+        cb.cost = p.value;
+        cb.qty = p.human;
+      }
+    }
+  }
+  saveCostBasis(costBasis);
   const totalValue = pricedPositions.reduce((s, p) => s + p.value, 0);
   // exclude USDC from total for decision purposes (it's the stable)
   const frozenPositions = pricedPositions.filter(p => frozenSyms.has(p.sym) && p.value > 0);
@@ -1019,15 +1258,14 @@ async function main() {
   // Track when each position was acquired (prevents flip-flopping)
   let holdStart = {};
   for (const p of nonStablePositions) {
-    if (costBasis[p.sym]) holdStart[p.sym] = Date.now() - HOLD_MIN_MS;
+    if (costBasis[p.sym] && !holdStart[p.sym]) holdStart[p.sym] = Date.now() - HOLD_MIN_MS;
   }
 
   // Route health check for all held positions
   for (const p of nonStablePositions) {
     const hasRoute = await checkLiquidity(p.id, USDC_NEAR, p.raw);
-    if (hasRoute === false) {
+      if (hasRoute === false) {
       log(`  ⚠️ HELD ${p.sym} ($${p.value.toFixed(2)}) has no sell route!`);
-      failedTokens.add(p.sym);
       routeHealth.push({ t: p.sym, buy: '?', sell: false, note: 'held: no sell route' });
     } else if (hasRoute === null) {
       log(`  ⚠️ ${p.sym} sell route check failed (network error), keeping position`);
@@ -1036,15 +1274,13 @@ async function main() {
       routeHealth.push({ t: p.sym, buy: '?', sell: true, note: 'held: ok' });
     }
   }
-  // Re-check failed tokens that are NOT held — if route is back, allow them again
-  const heldSyms = new Set(nonStablePositions.map(p => p.sym));
+  // Re-check failed tokens — if route is back, allow them again (held tokens included: stale failedToken blocks TOPUP)
   for (const sym of [...failedTokens]) {
-    if (heldSyms.has(sym)) continue;
     if (failCooldown[sym] && Date.now() - failCooldown[sym] < FAIL_COOLDOWN_MS) continue;
     const target = PORTFOLIO.find(p => p.sym === sym);
     if (!target) continue;
-    if (target.id.startsWith('1cs_v1:')) continue;
-    const hasRoute = await checkLiquidity(USDC_NEAR, target.id, Math.floor(MIN_POSITION_VALUE * 1e6).toString());
+    const rawAmount = target.id.startsWith('1cs_v1:') ? '1' : Math.floor(MIN_POSITION_VALUE * 1e6).toString();
+    const hasRoute = await checkLiquidity(USDC_NEAR, target.id, rawAmount);
     if (hasRoute) {
       log(`  ✅ ${sym} route restored, removing from failed tokens`);
       failedTokens.delete(sym);
@@ -1076,7 +1312,7 @@ async function main() {
   }
 
   // Decision
-  let action = 'HOLD', reason = '';
+  let action = 'HOLD', reason = '', tpSell = null;
 
   if (nearBal < GAS_RESERVE) {
     action = 'HOLD'; reason = `Low gas (${nearBal.toFixed(2)} NEAR)`;
@@ -1085,9 +1321,9 @@ async function main() {
   } else if (nonStablePositions.length > 0) {
     // Track score dips for junk hold timer
     for (const p of nonStablePositions) {
-      if (hasRealScores && p.score >= 5) {
+      if (hasRealScores && p.score >= 4) {
         if (junkTimers[p.sym]) { delete junkTimers[p.sym]; log(`  ${p.sym} recovered (sc=${p.score}), cleared junk timer`); }
-      } else if (hasRealScores && p.score < 5) {
+      } else if (hasRealScores && p.score < 4 && !p.dg) {
         if (!junkTimers[p.sym]) { junkTimers[p.sym] = Date.now(); log(`  ${p.sym} junk timer started (sc=${p.score})`); }
       }
       // Overbought timer: start when RSI > 92 & sc < 7, clear when condition no longer met
@@ -1099,39 +1335,71 @@ async function main() {
       }
     }
     saveJunkTimers(junkTimers);
+    // Log active junk timers with remaining time
+    for (const [sym, ts] of Object.entries(junkTimers)) {
+      const remaining = Math.max(0, JUNK_HOLD_MS - (Date.now() - ts));
+      const min = Math.floor(remaining / 60000);
+      const sec = Math.floor((remaining % 60000) / 1000);
+      const pos = nonStablePositions.find(p => p.sym === sym);
+      log(`  ⏳ ${sym} junk sell in ~${min}:${sec.toString().padStart(2, '0')} (sc=${pos?.score ?? '?'})`);
+    }
     saveObTimers(obTimers);
-    // Check each existing position for weakness first
+    // Urgent sells first (OB, sharp drop, volatile drop, EMA crash, pump end, crash)
     for (const p of nonStablePositions) {
-      if (p.rsi !== undefined && p.rsi > 92 && p.score < 7 && Date.now() - (obTimers[p.sym] || 0) >= OB_HOLD_MS) { action = 'SELL'; reason = `${p.sym} OB RSI=${p.rsi.toFixed(0)} sc=${p.score}`; break; }
-      // Junk sell: exit positions below sc=5 only after hold timer expires
-      if (hasRealScores && p.score < 5 && Date.now() - (junkTimers[p.sym] || 0) >= JUNK_HOLD_MS) { action = 'SELL'; reason = `${p.sym} junk sc=${p.score}`; break; }
-      // Sharp drop: MOM = -2 sell immediately
       if (p.m !== undefined && p.m === -2) { action = 'SELL'; reason = `${p.sym} sharp drop MOM=${p.m}`; break; }
-      // Volatile drop: VOL > 3 and negative momentum
-      if (p.vol !== undefined && p.vol > 3 && p.m !== undefined && p.m < 0) { action = 'SELL'; reason = `${p.sym} volatile drop VOL=${p.vol.toFixed(1)}x MOM=${p.m}`; break; }
-      // EMA crash: EMA:-2 sell immediately
+      if (p.vol !== undefined && p.vol > 3 && p.m !== undefined && p.m < 0 && !p.dg) { action = 'SELL'; reason = `${p.sym} volatile drop VOL=${p.vol.toFixed(1)}x MOM=${p.m}`; break; }
       if (p.e !== undefined && p.e === -2) { action = 'SELL'; reason = `${p.sym} EMA crash`; break; }
-      // Pump end: near peak, extreme vol, momentum dying
+      if (p.pd !== undefined && p.pd < -2) { action = 'SELL'; reason = `${p.sym} trailing stop PD=${p.pd.toFixed(1)}%`; break; }
       if (p.pd !== undefined && p.pd > -2 && p.vol !== undefined && p.vol > 2.5 && p.rsi !== undefined && p.rsi > 80 && p.e !== undefined && p.e <= 0) {
         action = 'SELL'; reason = `${p.sym} pump end PD=${p.pd.toFixed(0)}% VOL=${p.vol.toFixed(1)}x RSI=${p.rsi.toFixed(0)}`; break;
       }
-      // Emergency crash: near peak then EMA goes -2
+      if (costBasis[p.sym]?.pumpEntry && p.pd !== undefined && p.pd >= -1) {
+        action = 'SELL'; reason = `${p.sym} pump peak PD=${p.pd.toFixed(1)}%`; break;
+      }
       if (p.pd !== undefined && p.pd > -5 && p.e === -2) {
         action = 'SELL'; reason = `${p.sym} crash PD=${p.pd.toFixed(0)}% EMA:-2`; break;
       }
     }
-    // Check rotation if no immediate sell
+    // Take-profit tiers (after urgent defensive, before rotation)
     if (action === 'HOLD') {
-      const worst = nonStablePositions.reduce((w, p) => p.score < (w?.score ?? Infinity) ? p : w, nonStablePositions[0]);
+      for (const p of nonStablePositions) {
+        if (p.rsi == null) continue;
+        const cb = costBasis[p.sym];
+        if (!cb?.cost || cb.cost <= 0 || p.value <= 0) continue;
+        const pnlPct = (p.value - cb.cost) / cb.cost * 100;
+        const tpSt = loadTpState();
+        const state = tpSt[p.sym] || {};
+        if (p.rsi > 92) { action = 'SELL'; reason = `${p.sym} TP tier3 RSI=${p.rsi.toFixed(0)}`; tpSell = { sym: p.sym, fraction: 1.0, tier: 'tier92' }; break; }
+        if (!state.tier82 && p.rsi > 82 && pnlPct > 0) { action = 'SELL'; reason = `${p.sym} TP tier2 RSI=${p.rsi.toFixed(0)}`; tpSell = { sym: p.sym, fraction: 1/3, tier: 'tier82' }; break; }
+        if (!state.tier75 && p.rsi > 75 && pnlPct > 0) { action = 'SELL'; reason = `${p.sym} TP tier1 RSI=${p.rsi.toFixed(0)}`; tpSell = { sym: p.sym, fraction: 1/3, tier: 'tier75' }; break; }
+      }
+    }
+    // Then check rotation before marginal junk sell
+    if (action === 'HOLD') {
+      const worst = nonStablePositions.reduce((w, p) => {
+        if (p.dg) return w;
+        return p.score < (w?.score ?? Infinity) ? p : w;
+      }, null) || nonStablePositions[0];
+      if (worst.dg) { log(`  All positions have divergence, skip rotation`); } else {
       const heldTooShort = holdStart[worst.sym] && Date.now() - holdStart[worst.sym] < HOLD_MIN_MS;
       if (heldTooShort) { log(`  ${worst.sym} held < ${HOLD_MIN_MS/60000}min, skip rotate`); }
+      const volMomBoost = a => (a.v !== undefined && a.v > 1.5 && a.m !== undefined && a.m > 0 && (a.r === undefined || a.r < 70)) ? 2 : 0;
       const pumpStart = a => a.v !== undefined && a.v > 2.5 && a.e === 2 && a.d !== undefined && a.d < -10 && (a.r === undefined || a.r < 85);
-      const bestNew = !heldTooShort && ranked.find(a => a.sym !== 'NEAR' && (a.sc >= 6 || (a.sc >= 5 && a.m !== undefined && a.m >= 2) || pumpStart(a)) && (a.r === undefined || a.r < 80) && (a.m === undefined || a.m >= 0) && (a.v === undefined || a.v === null || a.v <= 3 || pumpStart(a)) && (a.e === undefined || a.e === null || a.e >= 0) && !failedTokens.has(a.sym) && !nonStablePositions.find(p => p.sym === a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym) && a.sc >= (worst?.score || 0) + 2);
+      const earlyPump = a => a.v !== undefined && a.v > 1.8 && a.e >= 0 && a.ch > 2 && (a.r === undefined || a.r < 80) && a.sc >= 3;
+      const pumpQualify = a => pumpStart(a) || earlyPump(a);
+      const bestNew = !heldTooShort && ranked.find(a => (buyable(a, failedTokens, routeInv) || divergenceBuyable(a, failedTokens, routeInv) || momentumBuyable(a, failedTokens, routeInv) || pumpStart(a) || earlyPump(a) || accumulationBuyable(a, failedTokens, routeInv)) && a.sym !== 'NEAR' && (a.sc >= 6 || (a.sc >= 5 && a.m !== undefined && a.m >= 2) || pumpStart(a) || earlyPump(a) || a.dg || momentumBuyable(a, failedTokens, routeInv) || accumulationBuyable(a, failedTokens, routeInv)) && (a.m === undefined || a.m >= 0) && (a.v === undefined || a.v === null || a.v <= 3 || pumpQualify(a)) && (a.e === undefined || a.e === null || a.e >= 0) && !nonStablePositions.find(p => p.sym === a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && ((a.sc + volMomBoost(a)) >= (worst?.score || 0) + 4));
       if (bestNew) {
         const slotOpen = nonStablePositions.length < MAX_POSITIONS;
         const usdcForBuy = usdcBal?.human || 0;
         const canBuyDirect = slotOpen && (usdcForBuy >= MIN_POSITION_VALUE - 0.50 || nonStablePositions.some(p => p.value >= MIN_POSITION_VALUE - usdcForBuy && p.value >= MIN_TRADE));
         if (!canBuyDirect) { action = 'ROTATE'; reason = `${worst.sym} weakest (sc=${worst.score}), rotate to best buyable`; }
+      }
+      }
+    }
+    // Junk sell as last resort (only if no rotation target found)
+    if (action === 'HOLD') {
+      for (const p of nonStablePositions) {
+        if (hasRealScores && p.score < 4 && !p.dg && Date.now() - (junkTimers[p.sym] || 0) >= JUNK_HOLD_MS) { action = 'SELL'; reason = `${p.sym} junk sc=${p.score}`; break; }
       }
     }
     // Risk-off: broad market crash → all to USDC
@@ -1139,12 +1407,19 @@ async function main() {
       action = 'SELL_ALL'; reason = `Risk-off F&G=${fg.v} down=${downCount}/15`;
     }
   }
+  // Daily trade cap — limit new entries to reduce churn (sells still fire)
+  const dTrades = loadTradeHistory().filter(t => t.type === 'BUY' && Date.now() - t.ts < 86400000).length;
+  if (action === 'HOLD' && dTrades >= MAX_DAILY_TRADES && nonStablePositions.length > 0) {
+    reason = `Daily buy limit (${dTrades}/${MAX_DAILY_TRADES}), waiting until tomorrow`;
+  }
   // If no sell/rotate and room to buy more
   let buyTargetSym;
-  if (action === 'HOLD' && nonStablePositions.length < MAX_POSITIONS) {
+  if (action === 'HOLD' && nonStablePositions.length < MAX_POSITIONS && (dTrades < MAX_DAILY_TRADES || nonStablePositions.length === 0)) {
     const heldSyms = new Set(nonStablePositions.map(p => p.sym));
     const pumpStart = a => a.v !== undefined && a.v > 2.5 && a.e === 2 && a.d !== undefined && a.d < -10 && (a.r === undefined || a.r < 85);
-    const candidate = ranked.find(a => a.sym !== 'NEAR' && (a.sc >= 6 || (a.sc >= 5 && a.m !== undefined && a.m >= 2) || pumpStart(a)) && (a.r === undefined || a.r < 80) && (a.m === undefined || a.m >= 0) && (a.v === undefined || a.v === null || a.v <= 3 || pumpStart(a)) && (a.e === undefined || a.e === null || a.e >= 0) && !failedTokens.has(a.sym) && !heldSyms.has(a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym) && routeInv.has(a.sym));
+    const earlyPump = a => a.v !== undefined && a.v > 1.8 && a.e >= 0 && a.ch > 2 && (a.r === undefined || a.r < 80) && a.sc >= 3;
+    const pumpQualify = a => pumpStart(a) || earlyPump(a);
+    const candidate = ranked.find(a => (buyable(a, failedTokens, routeInv) || divergenceBuyable(a, failedTokens, routeInv) || momentumBuyable(a, failedTokens, routeInv) || pumpStart(a) || earlyPump(a) || accumulationBuyable(a, failedTokens, routeInv)) && a.sym !== 'NEAR' && (a.sc >= 6 || (a.sc >= 5 && a.m !== undefined && a.m >= 2) || pumpStart(a) || earlyPump(a) || a.dg || momentumBuyable(a, failedTokens, routeInv) || accumulationBuyable(a, failedTokens, routeInv)) && (a.m === undefined || a.m >= 0) && (a.v === undefined || a.v === null || a.v <= 3 || pumpQualify(a)) && (a.e === undefined || a.e === null || a.e >= 0) && !heldSyms.has(a.sym) && !raisedSyms[a.sym] && PORTFOLIO.find(p => p.sym === a.sym));
     const usdcForBuy = usdcBal?.human || 0;
     if (candidate && PORTFOLIO.find(p => p.sym === candidate.sym) && usdcForBuy >= MIN_POSITION_VALUE - 0.50) {
       action = 'BUY'; reason = `Buy ${candidate.sym} (sc=${candidate.sc}) #${nonStablePositions.length + 1}/${MAX_POSITIONS}`; buyTargetSym = candidate.sym;
@@ -1159,7 +1434,7 @@ async function main() {
       } else {
         // Check if selling a holding could cover the USDC gap
         const gap = MIN_POSITION_VALUE - usdcForBuy;
-        const canSell = nonStablePositions.some(p => p.value >= gap && p.value >= MIN_TRADE && candidate.sc >= (p.score || 0) && !raisedSyms[p.sym]);
+        const canSell = nonStablePositions.some(p => !p.dg && p.value >= gap && p.value >= MIN_TRADE && candidate.sc >= (p.score || 0) && !raisedSyms[p.sym]);
         if (canSell) {
           action = 'BUY'; reason = `Buy ${candidate.sym} (sc=${candidate.sc}) #${nonStablePositions.length + 1}/${MAX_POSITIONS} (sell to raise USDC)`; buyTargetSym = candidate.sym;
         } else {
@@ -1189,15 +1464,24 @@ async function main() {
   // Top-up: at cap with idle USDC, reinvest in best positions below tier max
   if (action === 'HOLD') {
     const usdcForTopup = usdcBal?.human || 0;
-    if (usdcForTopup >= MIN_POSITION_VALUE - 0.50) {
+    if (usdcForTopup >= MIN_TRADE) {
       const sortedPos = [...nonStablePositions].sort((a, b) => (b.score || 0) - (a.score || 0));
       const grandTotalT = investableTotal;
+      const topupThrottle = loadTopupThrottle();
       for (let i = 0; i < sortedPos.length; i++) {
         const pos = sortedPos[i];
+        if (pos.score == null || pos.score < TOPUP_SCORE_MIN) continue;
+        if (topupThrottle[pos.sym] && Date.now() - topupThrottle[pos.sym] < TOPUP_THROTTLE_MS) continue;
+        if (pos.score < 7) {
+          const volOk = pos.vol === undefined || pos.vol === null || pos.vol >= 1.0;
+          const momOk = pos.mom === undefined || pos.mom === null || pos.mom >= 0;
+          const emaOk = pos.e === undefined || pos.e === null || pos.e >= 0;
+          if (!volOk && !momOk && !emaOk) continue;
+        }
         const pct = tierPct(i, nonStablePositions.length);
         const maxVal = grandTotalT * pct;
         const room = maxVal - pos.value;
-        if (room >= MIN_POSITION_VALUE) {
+        if (room >= MIN_TRADE) {
           action = 'TOPUP'; reason = `Top up ${pos.sym} (sc=${pos.score}) $${room.toFixed(2)} room to ${(pct*100).toFixed(0)}%`;
           break;
         }
@@ -1207,7 +1491,7 @@ async function main() {
   if (!reason && action === 'HOLD') {
     if (nonStablePositions.length >= MAX_POSITIONS) {
       const worst = nonStablePositions.reduce((w, p) => p.score < (w?.score ?? Infinity) ? p : w, nonStablePositions[0]);
-      const bestCandidates = ranked.filter(a => a.sc >= 3 && routeInv.has(a.sym)).slice(0, 3).map(a => `${a.sym}(sc=${a.sc})`).join(', ') || 'none';
+      const bestCandidates = ranked.filter(a => a.sc >= 3 && routeInv.has(a.sym) && !STABLE_SYMS.has(a.sym)).slice(0, 3).map(a => `${a.sym}(sc=${a.sc})`).join(', ') || 'none';
       reason = `At cap ${nonStablePositions.length}/${MAX_POSITIONS} (worst=${worst.sym} sc=${worst.score}) | available: ${bestCandidates}`;
     } else {
       reason = 'No sell/rotate triggers, waiting';
@@ -1228,6 +1512,7 @@ async function main() {
         const liq = await checkLiquidity(p.id, USDC_NEAR, p.raw);
         if (liq === false) { log(`  ⚠️ ${p.sym} has no sell route, marking failed`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); continue; }
         if (liq === null) { log(`  ⚠️ ${p.sym} sell route check failed (network error), skipping`); continue; }
+        if (!await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) { log(`  Skipped (AI rejected)`); if (reason.includes('junk')) { junkTimers[p.sym] = Date.now(); log(`  ${p.sym} junk timer reset (AI rejected)`); } continue; }
         log(`Sell ${p.sym}→USDC...`);
         const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, p.raw, env.pk, assets);
         tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1241,35 +1526,78 @@ async function main() {
             const sp = Number(r.out);
             const spnl = sp - scb.cost;
             log(`  ✅ Sold ${p.sym} → ${r.out} USDC (${spnl >= 0 ? '+' : ''}$${spnl.toFixed(2)}, ${spnl >= 0 ? '+' : ''}${(spnl / scb.cost * 100).toFixed(1)}%) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
+            recordTrade('SELL', p.sym, sp, spnl, spnl / scb.cost * 100, 'risk-off', p.score);
           }
-          delete costBasis[p.sym]; delete junkTimers[p.sym]; delete obTimers[p.sym]; saveCostBasis(costBasis); delete holdStart[p.sym]; markTrade(); break;
+          delete costBasis[p.sym]; delete junkTimers[p.sym]; delete obTimers[p.sym]; saveCostBasis(costBasis); const tpStSa = loadTpState(); if (tpStSa[p.sym]) { delete tpStSa[p.sym]; saveTpState(tpStSa); } delete holdStart[p.sym]; markTrade(); break;
         }
         else log(`  Sell skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
       }
     } else if (action === 'SELL') {
       const p = nonStablePositions.find(x => reason.startsWith(x.sym));
       if (p) {
-        const liq = await checkLiquidity(p.id, USDC_NEAR, p.raw);
+        const isTpPartial = tpSell?.sym === p.sym && tpSell.fraction > 0 && tpSell.fraction < 1.0;
+        const rawToSell = isTpPartial
+          ? (BigInt(p.raw) * BigInt(Math.round(tpSell.fraction * 1e12)) / 1000000000000n).toString()
+          : p.raw;
+        if (isTpPartial && BigInt(rawToSell) <= 0n) { log(`  TP fraction too small, skipping`); }
+        else {
+        const liq = await checkLiquidity(p.id, USDC_NEAR, rawToSell);
         if (liq === false) { log(`  ⚠️ ${p.sym} has no sell route, skipping`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); }
         else if (liq === null) { log(`  ⚠️ ${p.sym} sell route check failed (network error), skipping`); }
         else {
+          if (!await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) { log(`  Skipped (AI rejected)`); if (reason.includes('junk')) { junkTimers[p.sym] = Date.now(); log(`  ${p.sym} junk timer reset (AI rejected)`); } } else {
           log(`Sell ${p.sym}→USDC...`);
-          const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, p.raw, env.pk, assets);
+          const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, rawToSell, env.pk, assets);
           tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
           if (r?.ok) {
-            const sellBi = bals.findIndex(b => b.sym === p.sym);
-            if (sellBi >= 0) bals[sellBi].human = 0;
-            const usdcBi = bals.findIndex(b => b.sym === 'USDC');
-            if (usdcBi >= 0 && r.out) bals[usdcBi].human += Number(r.out);
-            const scb2 = costBasis[p.sym];
-            if (scb2?.cost && r.out) {
-              const sp2 = Number(r.out);
-              const spnl2 = sp2 - scb2.cost;
-              log(`  ✅ Sold ${p.sym} → ${r.out} USDC (${spnl2 >= 0 ? '+' : ''}$${spnl2.toFixed(2)}, ${spnl2 >= 0 ? '+' : ''}${(spnl2 / scb2.cost * 100).toFixed(1)}%) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
+            if (isTpPartial) {
+              const rawSell = BigInt(rawToSell);
+              const rawTotal = BigInt(p.raw);
+              const rawRemaining = rawTotal - rawSell;
+              const rawRemainingStr = rawRemaining.toString();
+              const sellDec = PORTFOLIO.find(x => x.sym === p.sym)?.dec || 18;
+              const usdcBi = bals.findIndex(b => b.sym === 'USDC');
+              if (usdcBi >= 0 && r.out) bals[usdcBi].human += Number(r.out);
+              const sellBi = bals.findIndex(b => b.sym === p.sym);
+              if (sellBi >= 0) { bals[sellBi].raw = rawRemainingStr; bals[sellBi].human = Number(rawRemaining) / 10 ** sellDec; }
+              const nsIdx = nonStablePositions.findIndex(x => x.sym === p.sym);
+              if (nsIdx >= 0) { nonStablePositions[nsIdx].raw = rawRemainingStr; nonStablePositions[nsIdx].human = Number(rawRemaining) / 10 ** sellDec; }
+              if (costBasis[p.sym]) {
+                const digits = rawTotal.toString().length;
+                const scale = 10n ** BigInt(Math.max(0, digits - 12));
+                const rawSellScaled = Number(rawSell / scale);
+                const rawTotalScaled = Number(rawTotal / scale);
+                const soldFrac = rawTotalScaled > 0 ? rawSellScaled / rawTotalScaled : 0;
+                const soldCost = costBasis[p.sym].cost * soldFrac;
+                const proceeds = Number(r.out) || 0;
+                const pnl = proceeds - soldCost;
+                log(`  ✅ TP partial ${p.sym} → ${r.out} USDC (${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
+                recordTrade('SELL', p.sym, proceeds, pnl, soldCost > 0 ? pnl / soldCost * 100 : 0, reason.split(' ').slice(1).join(' '), p.score);
+                costBasis[p.sym].cost *= (1 - soldFrac);
+                costBasis[p.sym].qty *= (1 - soldFrac);
+                saveCostBasis(costBasis);
+              }
+              const tpSt = loadTpState();
+              tpSt[p.sym] = { ...(tpSt[p.sym] || {}), [tpSell.tier]: true };
+              saveTpState(tpSt);
+            } else {
+              const sellBi = bals.findIndex(b => b.sym === p.sym);
+              if (sellBi >= 0) bals[sellBi].human = 0;
+              const usdcBi = bals.findIndex(b => b.sym === 'USDC');
+              if (usdcBi >= 0 && r.out) bals[usdcBi].human += Number(r.out);
+              const scb2 = costBasis[p.sym];
+              if (scb2?.cost && r.out) {
+                const sp2 = Number(r.out);
+                const spnl2 = sp2 - scb2.cost;
+                log(`  ✅ Sold ${p.sym} → ${r.out} USDC (${spnl2 >= 0 ? '+' : ''}$${spnl2.toFixed(2)}, ${spnl2 >= 0 ? '+' : ''}${(spnl2 / scb2.cost * 100).toFixed(1)}%) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
+                recordTrade('SELL', p.sym, sp2, spnl2, spnl2 / scb2.cost * 100, reason.split(' ').slice(1).join(' '), p.score);
+              }
+              delete costBasis[p.sym]; delete junkTimers[p.sym]; delete obTimers[p.sym]; saveCostBasis(costBasis); const tpSf = loadTpState(); if (tpSf[p.sym]) { delete tpSf[p.sym]; saveTpState(tpSf); } delete holdStart[p.sym];
             }
-            delete costBasis[p.sym]; delete junkTimers[p.sym]; delete obTimers[p.sym]; saveCostBasis(costBasis); delete holdStart[p.sym];
           }
           if (!r?.ok) log(`  Sell skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
+          }
+        }
         }
       }
     } else if (action === 'REBALANCE') {
@@ -1285,8 +1613,10 @@ async function main() {
           const heldSyms = new Set(nonStablePositions.map(x => x.sym));
           let buyBest = null;
           for (const best of ranked) {
-        if (!(best.sc >= 6 || (best.sc >= 5 && best.m !== undefined && best.m >= 2))) break;
-            if (best.sym === p.sym || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || (best.m !== undefined && best.m < 0) || !routeInv.has(best.sym)) continue;
+        if (!(best.sc >= 6 || (best.sc >= 5 && best.m !== undefined && best.m >= 2))) {
+          if (!best.dg || best.sc < 5) break;
+        }
+            if ((!buyable(best, failedTokens, routeInv) && !divergenceBuyable(best, failedTokens, routeInv)) || best.sym === p.sym || raisedSyms[best.sym]) continue;
             if (heldSyms.has(best.sym)) {
               const curVal = nonStablePositions.find(x => x.sym === best.sym)?.value || 0;
               const grandTotal = investableTotal;
@@ -1306,6 +1636,7 @@ async function main() {
           if (!buyBest) {
             log(`  No buyable target found, rebalance skipped`);
           } else {
+            if (!await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) { log(`  Rebalance skipped (AI rejected)`); } else {
             log(`Rebalance ${p.sym}→USDC...`);
             const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, p.raw, env.pk, assets);
             tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1323,12 +1654,14 @@ async function main() {
                 const spR = Number(r.out);
                 const spnlR = spR - scbR.cost;
                 log(`  ✅ Sold ${p.sym} → ${r.out} USDC (${spnlR >= 0 ? '+' : ''}$${spnlR.toFixed(2)}, ${spnlR >= 0 ? '+' : ''}${(spnlR / scbR.cost * 100).toFixed(1)}%) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
+                recordTrade('SELL', p.sym, spR, spnlR, spnlR / scbR.cost * 100, 'rebalance', p.score);
               }
               raisedSyms[p.sym] = Date.now();
               saveRaisedSyms(raisedSyms);
               delete costBasis[p.sym];
               delete junkTimers[p.sym]; delete obTimers[p.sym];
               saveCostBasis(costBasis);
+              const tpStRb = loadTpState(); if (tpStRb[p.sym]) { delete tpStRb[p.sym]; saveTpState(tpStRb); }
               const target = buyEntry(buyBest.sym);
               if (target && usdcBal.human >= MIN_POSITION_VALUE) {
                 const grandTotal = investableTotal;
@@ -1349,7 +1682,7 @@ async function main() {
                     const outRb = Number(r2.out) || 0;
                     costBasis[buyBest.sym] = {
                       cost: (prevRb?.cost || 0) + buyUsd,
-                      spread: r2?.spread || prevRb?.spread || 0,
+                      spread: prevRb ? ((prevRb.cost * (prevRb.spread || 0) + buyUsd * (r2?.spread || 0)) / (prevRb.cost + buyUsd)) : (r2?.spread || 0),
                       fee: (prevRb?.fee || 0) + (r2?.feeUsd || 0),
                       qty: (prevRb?.qty || 0) + outRb,
                       price: outRb > 0 ? buyUsd / outRb : (prevRb?.price || 0),
@@ -1357,11 +1690,13 @@ async function main() {
                     saveCostBasis(costBasis);
                     markTrade();
                     log(`  ✅ Rebalance complete: ${p.sym}→${buyBest.sym}`);
+                    recordTrade('BUY', buyBest.sym, buyUsd, null, null, 'rebalance', buyBest.sc);
                   }
                 }
               }
             } else {
               log(`  Rebalance skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
+            }
             }
           }
         }
@@ -1379,7 +1714,7 @@ async function main() {
         let buyBest = null;
         for (const best of ranked) {
           if (!(best.sc >= 6 || (best.sc >= 5 && best.m !== undefined && best.m >= 2))) break;
-          if (failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || (best.m !== undefined && best.m < 0) || !routeInv.has(best.sym)) continue;
+          if (!buyable(best, failedTokens, routeInv) || raisedSyms[best.sym]) continue;
           if (best.sym === worst.sym) continue;
           if (heldSyms.has(best.sym)) {
             const curVal = nonStablePositions.find(p => p.sym === best.sym)?.value || 0;
@@ -1397,13 +1732,57 @@ async function main() {
           if (routeOk) { buyBest = best; break; }
           log(`  ⚠️ ${best.sym} no buy route, skipping`);
         }
+        // Quality check: for sc < 7, require vol > 1.0 or mom > 0 or ema >= 0
+        if (buyBest && buyBest.sc < 7) {
+          const volOk = buyBest.v === undefined || buyBest.v === null || buyBest.v >= 1.0;
+          const momOk = buyBest.m === undefined || buyBest.m === null || buyBest.m > 0;
+          const emaOk = buyBest.e === undefined || buyBest.e === null || buyBest.e >= 0;
+          if (!volOk && !momOk && !emaOk) {
+            log(`  ${buyBest.sym} quality check failed (VOL=${buyBest.v?.toFixed(1)||'?'} MOM=${buyBest.m??'?'} EMA=${buyBest.e??'?'}), fallback to USDC`);
+            buyBest = null;
+          }
+        }
         if (!buyBest) {
-          log(`  No buyable target found, rotate skipped`);
+          // Fallback: no good rotation target, sell weakest to USDC
+          if (!await validateSell(worst.sym, reason, worst, fg, pricedPositions, holdStart)) { log(`  Rotate→USDC skipped (AI rejected)`); } else {
+          log(`Rotate→USDC: sell ${worst.sym} (no good rotation target)...`);
+          const r = await execSwap(worst, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, worst.raw, env.pk, assets);
+          tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
+          if (r?.ok) {
+            const outUsd = r.out ? Number(r.out) : (worst.value * (1 - (r.spread || 0) / 100));
+            usdcBal = { human: usdcBal ? usdcBal.human + outUsd : outUsd };
+            const idx = nonStablePositions.findIndex(p => p.sym === worst.sym);
+            if (idx >= 0) nonStablePositions.splice(idx, 1);
+            const sellRBi = bals.findIndex(b => b.sym === worst.sym);
+            if (sellRBi >= 0) bals[sellRBi].human = 0;
+            const usdcRBi = bals.findIndex(b => b.sym === 'USDC');
+            if (usdcRBi >= 0 && r.out) bals[usdcRBi].human += Number(r.out);
+            const scbRo = costBasis[worst.sym];
+            if (scbRo?.cost && r.out) {
+              const spRo = Number(r.out);
+              const spnlRo = spRo - scbRo.cost;
+              log(`  ✅ Sold ${worst.sym} → ${r.out} USDC (${spnlRo >= 0 ? '+' : ''}$${spnlRo.toFixed(2)}, ${spnlRo >= 0 ? '+' : ''}${(spnlRo / scbRo.cost * 100).toFixed(1)}%) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
+              recordTrade('SELL', worst.sym, spRo, spnlRo, spnlRo / scbRo.cost * 100, 'rotate-usdc', worst.score);
+            }
+            raisedSyms[worst.sym] = Date.now();
+            saveRaisedSyms(raisedSyms);
+            delete costBasis[worst.sym];
+            delete junkTimers[worst.sym]; delete obTimers[worst.sym];
+            saveCostBasis(costBasis);
+            const tpStRo = loadTpState(); if (tpStRo[worst.sym]) { delete tpStRo[worst.sym]; saveTpState(tpStRo); }
+            delete holdStart[worst.sym];
+            markTrade();
+            log(`  ✅ Rotate→USDC complete: ${worst.sym} → USDC`);
+          } else {
+            log(`  Rotate→USDC skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
+          }
+          }
         } else {
           const buyTarget = buyEntry(buyBest.sym);
           if (!buyTarget) {
             log(`  ⚠️ ${buyBest.sym} not buyable, rotate skipped`);
           } else {
+            if (!await validateSell(worst.sym, reason, worst, fg, pricedPositions, holdStart)) { log(`  Rotate skipped (AI rejected)`); } else {
             log(`Rotate ${worst.sym}→USDC...`);
             const r = await execSwap(worst, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, worst.raw, env.pk, assets);
             tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1421,12 +1800,14 @@ async function main() {
                 const spRo = Number(r.out);
                 const spnlRo = spRo - scbRo.cost;
                 log(`  ✅ Sold ${worst.sym} → ${r.out} USDC (${spnlRo >= 0 ? '+' : ''}$${spnlRo.toFixed(2)}, ${spnlRo >= 0 ? '+' : ''}${(spnlRo / scbRo.cost * 100).toFixed(1)}%) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
+                recordTrade('SELL', worst.sym, spRo, spnlRo, spnlRo / scbRo.cost * 100, 'rotate', worst.score);
               }
               raisedSyms[worst.sym] = Date.now();
               saveRaisedSyms(raisedSyms);
               delete costBasis[worst.sym];
               delete junkTimers[worst.sym]; delete obTimers[worst.sym];
               saveCostBasis(costBasis);
+              const tpStRo = loadTpState(); if (tpStRo[worst.sym]) { delete tpStRo[worst.sym]; saveTpState(tpStRo); }
               delete holdStart[worst.sym];
               const target = buyEntry(buyBest.sym);
               if (target && usdcBal.human >= MIN_POSITION_VALUE) {
@@ -1448,7 +1829,7 @@ async function main() {
                     const outRt = Number(r2.out) || 0;
                     costBasis[buyBest.sym] = {
                       cost: (prevRt?.cost || 0) + buyUsd,
-                      spread: r2?.spread || prevRt?.spread || 0,
+                      spread: prevRt ? ((prevRt.cost * (prevRt.spread || 0) + buyUsd * (r2?.spread || 0)) / (prevRt.cost + buyUsd)) : (r2?.spread || 0),
                       fee: (prevRt?.fee || 0) + (r2?.feeUsd || 0),
                       qty: (prevRt?.qty || 0) + outRt,
                       price: outRt > 0 ? buyUsd / outRt : (prevRt?.price || 0),
@@ -1457,11 +1838,13 @@ async function main() {
                     markTrade();
                     holdStart[buyBest.sym] = Date.now();
                     log(`  ✅ Rotate complete: ${worst.sym}→${buyBest.sym}`);
+                    recordTrade('BUY', buyBest.sym, buyUsd, null, null, 'rotate', buyBest.sc);
                   }
                 }
               }
             } else {
               log(`  Rotate skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
+            }
             }
           }
         }
@@ -1473,7 +1856,7 @@ async function main() {
         const grandTotalR = investableTotal;
         const targetBuyUsd = Math.max(MIN_POSITION_VALUE, grandTotalR * tierPct(slotIdxR, nonStablePositions.length + 1));
         const shortfall = Math.max(0, targetBuyUsd - (usdcBal?.human || 0));
-        const sellCandidates = [...nonStablePositions].filter(p => !raisedSyms[p.sym]).sort((a, b) => (a.score || 999) - (b.score || 999) || (b.rsi || 0) - (a.rsi || 0));
+        const sellCandidates = [...nonStablePositions].filter(p => !raisedSyms[p.sym] && (!holdStart[p.sym] || Date.now() - holdStart[p.sym] >= HOLD_MIN_MS)).sort((a, b) => (a.score || 999) - (b.score || 999) || (b.rsi || 0) - (a.rsi || 0));
         for (const sellP of sellCandidates) {
           if (sellP.value < MIN_TRADE) continue;
           const sellPrice = assets[sellP.sym]?.p || 0;
@@ -1488,6 +1871,7 @@ async function main() {
           const liq = await checkLiquidity(sellP.id, USDC_NEAR, rawToSell);
           if (liq === false) { log(`  ⚠️ ${sellP.sym} no sell route, cannot raise USDC`); continue; }
           else if (liq === null) { log(`  ⚠️ ${sellP.sym} sell route check failed (network error), cannot raise USDC`); continue; }
+          if (!await validateSell(sellP.sym, 'raise USDC (' + (buyTargetSym || '?') + ')', sellP, fg, pricedPositions, holdStart)) { log(`  Raise USDC skipped (AI rejected)`); continue; }
           log(`  Raise USDC: sell ${sellP.sym} ($${isFullSell ? sellP.value.toFixed(2) : shortfall.toFixed(2)})...`);
           const r = await execSwap(sellP, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, rawToSell, env.pk, assets);
           tradedThisCycle = true; lastSwapFee = (lastSwapFee || 0) + (r.feeUsd || 0);
@@ -1501,6 +1885,7 @@ async function main() {
                 const proceedsFs = Number(r.out);
                 const pnlFs = proceedsFs - scbFS.cost;
                 log(`  ✅ Sold ${sellP.sym} → ${r.out} USDC (${pnlFs >= 0 ? '+' : ''}$${pnlFs.toFixed(2)}, ${pnlFs >= 0 ? '+' : ''}${(pnlFs / scbFS.cost * 100).toFixed(1)}%) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
+                recordTrade('SELL', sellP.sym, proceedsFs, pnlFs, pnlFs / scbFS.cost * 100, 'raise USDC', sellP.score);
               }
               const idx = nonStablePositions.findIndex(p => p.sym === sellP.sym);
               if (idx >= 0) nonStablePositions.splice(idx, 1);
@@ -1511,26 +1896,32 @@ async function main() {
               delete costBasis[sellP.sym];
               delete junkTimers[sellP.sym]; delete obTimers[sellP.sym];
               saveCostBasis(costBasis);
+              const tpStRa = loadTpState(); if (tpStRa[sellP.sym]) { delete tpStRa[sellP.sym]; saveTpState(tpStRa); }
               delete holdStart[sellP.sym];
             } else {
-              if (sellBu >= 0) {
-                const rawRemaining = BigInt(bals[sellBu].raw) - BigInt(rawToSell);
-                bals[sellBu].raw = rawRemaining.toString();
-                bals[sellBu].human = Number(rawRemaining) / 10 ** sellDec;
-                const nsp = nonStablePositions.find(p => p.sym === sellP.sym);
-                if (nsp) { nsp.raw = bals[sellBu].raw; nsp.human = bals[sellBu].human; }
-              }
+              const originalRawTotal = BigInt(sellP.raw);
               if (costBasis[sellP.sym]) {
-                const rawSellNum = Number(BigInt(rawToSell));
-                const rawTotalNum = Number(BigInt(sellP.raw));
-                const soldFrac = rawTotalNum > 0 ? rawSellNum / rawTotalNum : 0;
+                const rawSellNum = BigInt(rawToSell);
+                const digits = originalRawTotal.toString().length;
+                const scale = 10n ** BigInt(Math.max(0, digits - 12));
+                const rawSellScaled = Number(rawSellNum / scale);
+                const rawTotalScaled = Number(originalRawTotal / scale);
+                const soldFrac = rawTotalScaled > 0 ? rawSellScaled / rawTotalScaled : 0;
                 const soldCost = costBasis[sellP.sym].cost * soldFrac;
                 const proceedsPs = Number(r.out) || 0;
                 const pnlPs = proceedsPs - soldCost;
                 log(`  ✅ Sold partial ${sellP.sym} → ${r.out} USDC (${pnlPs >= 0 ? '+' : ''}$${pnlPs.toFixed(2)}, ${pnlPs >= 0 ? '+' : ''}${(pnlPs / (soldCost || 1) * 100).toFixed(1)}%) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
+                recordTrade('SELL', sellP.sym, proceedsPs, pnlPs, soldCost > 0 ? pnlPs / soldCost * 100 : 0, 'raise USDC (partial)', sellP.score);
                 costBasis[sellP.sym].cost *= (1 - soldFrac);
                 costBasis[sellP.sym].qty *= (1 - soldFrac);
                 saveCostBasis(costBasis);
+              }
+              if (sellBu >= 0) {
+                const rawRemaining = originalRawTotal - BigInt(rawToSell);
+                bals[sellBu].raw = rawRemaining.toString();
+                bals[sellBu].human = Number(rawRemaining) / 10 ** sellDec;
+                const nsp = nonStablePositions.find(p => p.sym === sellP.sym);
+                if (nsp) { nsp.raw = bals[sellBu].raw; nsp.human = bals[sellBu].human; }
               }
             }
             const usdcBu = bals.findIndex(b => b.sym === 'USDC');
@@ -1547,32 +1938,48 @@ async function main() {
         action = 'HOLD';
       }
       const heldSyms = new Set([...nonStablePositions.map(p => p.sym), ...soldSyms]);
+      const aiRejected = new Set();
       // Try the decision's candidate first, fall back to ranked scan
+      const pumpStart = a => a.v !== undefined && a.v > 2.5 && a.e === 2 && a.d !== undefined && a.d < -10 && (a.r === undefined || a.r < 85);
+      const earlyPump = a => a.v !== undefined && a.v > 1.8 && a.e >= 0 && a.ch > 2 && (a.r === undefined || a.r < 80) && a.sc >= 3;
+      const pumpQualify = a => pumpStart(a) || earlyPump(a);
       async function tryBuy(sym) {
         const best = ranked.find(a => a.sym === sym);
         if (!best) return false;
-        if (!(best.sc >= 6 || (best.sc >= 5 && best.m !== undefined && best.m >= 2)) || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || (best.m !== undefined && best.m < 0) || !routeInv.has(best.sym)) return false;
-        if (heldSyms.has(best.sym)) return false;
+        const buyableOk = buyable(best, failedTokens, routeInv) || divergenceBuyable(best, failedTokens, routeInv) || momentumBuyable(best, failedTokens, routeInv) || pumpStart(best) || earlyPump(best) || accumulationBuyable(best, failedTokens, routeInv);
+        const qualityOk = best.sc >= 6 || (best.sc >= 5 && best.m !== undefined && best.m >= 2) || pumpStart(best) || earlyPump(best) || best.dg || momentumBuyable(best, failedTokens, routeInv) || accumulationBuyable(best, failedTokens, routeInv);
+        if (!buyableOk) { log(`  ⏭️ ${sym} not buyable (sc=${best.sc}, vs=${best.vs != null ? best.vs.toFixed(1) : '?'}, m=${best.m ?? '?'}, e=${best.e ?? '?'})`); return false; }
+        if (!qualityOk) { log(`  ⏭️ ${sym} fails quality gate (sc=${best.sc}, m=${best.m ?? '?'}, dg=${best.dg ? 'Y' : 'N'})`); return false; }
+        if (raisedSyms[best.sym]) { log(`  ⏭️ ${sym} recently raised, skipping`); return false; }
+        if (heldSyms.has(best.sym)) { log(`  ⏭️ ${sym} already held`); return false; }
         const target = buyEntry(best.sym);
-        if (!target || !usdcBal || usdcBal.human < MIN_POSITION_VALUE - 0.50) return false;
+        if (!target) { log(`  ⏭️ ${sym} not in portfolio`); return false; }
+        if (!usdcBal || usdcBal.human < MIN_POSITION_VALUE - 0.50) { log(`  ⏭️ ${sym} insufficient USDC ($${usdcBal?.human?.toFixed(2) || 0})`); return false; }
         const slotIdx = Math.min(nonStablePositions.length, 2);
         const grandTotal = investableTotal;
-        let buyUsd = Math.max(MIN_POSITION_VALUE - 0.50, Math.min(usdcBal.human, grandTotal * tierPct(slotIdx, nonStablePositions.length + 1)));
+        const isMomBuy = momentumBuyable(best, failedTokens, routeInv) && !buyable(best, failedTokens, routeInv);
+        const isAccumBuy = accumulationBuyable(best, failedTokens, routeInv) && !buyable(best, failedTokens, routeInv) && !momentumBuyable(best, failedTokens, routeInv);
+        let buyUsd = Math.max(MIN_POSITION_VALUE - 0.50, Math.min(usdcBal.human, grandTotal * (isMomBuy || isAccumBuy ? 0.25 : tierPct(slotIdx, nonStablePositions.length + 1))));
         const amt = Math.floor(buyUsd * 1e6);
-        if (amt < Math.floor((MIN_POSITION_VALUE - 0.50) * 1e6)) return false;
+        if (amt < Math.floor((MIN_POSITION_VALUE - 0.50) * 1e6)) { log(`  ⏭️ ${sym} amount too small ($${buyUsd.toFixed(2)})`); return false; }
         const liq = await checkLiquidity(USDC_NEAR, target.id, amt.toString());
         if (liq !== true) { if (liq === false) { log(`  ⚠️ ${sym} no buy route`); newFailedTokens.add(sym); if (routePrev.has(sym)) logRouteChange(sym, 'disappeared'); } else if (liq === null) { log(`  ⚠️ ${sym} buy route check failed (network error), skipping`); } return false; }
-        const sellCheck = await checkLiquidity(target.id, USDC_NEAR, Math.floor(MIN_POSITION_VALUE * 1e6).toString());
+        const sellCheck = await checkLiquidity(target.id, USDC_NEAR, '1' + '0'.repeat(target.dec));
         if (sellCheck !== true) { routeHealth.push({ t: sym, buy: true, sell: sellCheck === null ? null : false, note: sellCheck === null ? 'buy-check: sell route network error' : 'buy-check: no sell route' }); log(`  ⚠️ ${sym} no sell route, skipping buy`); if (sellCheck === false) { newFailedTokens.add(sym); if (routePrev.has(sym)) logRouteChange(sym, 'disappeared'); } return false; }
         routeHealth.push({ t: sym, buy: true, sell: true, note: 'buy-check: both routes ok' });
         // AI validation
+        const ruleTriggered = earlyPump(best) || pumpStart(best);
         if (deepseek.hasKey()) {
           const aiMsg = [
-            { role: 'system', content: 'You are a crypto trading assistant. Validate whether buying the given token is a good idea. Reply ONLY with "YES" or "NO" followed by a brief reason. Be conservative.' },
-            { role: 'user', content: `F&G ${fg.v}/100 ${fg.t}. Propose: BUY ${best.sym} (sc=${best.sc}, RSI=${best.r ?? '?'}, MOM=${best.m ?? '?'}, ${best.ch >= 0 ? '+' : ''}${best.ch?.toFixed(1) || '?'}% 24h). Portfolio: ${pricedPositions.filter(p => p.value > 0.01).map(p => `${p.sym}=$${p.value.toFixed(0)}`).join(', ') || 'empty'}.` },
+             { role: 'system', content: 'You are a crypto trading assistant for a momentum/scoring strategy. Validate whether buying the given token is a good idea. Our buy signals: (1) high score (sc>=7), (2) earlyPump (VOL>1.8x or VS>2x, EMA>=0, 24h>2%), (3) pumpStart (heavy VOL>2.5x or VS>2.5x, EMA=+2, deep dip), (4) strong trend (sc>=6, EMA>=+1, PD<-5% dip in uptrend), (5) momentum entry (sc>=3, VOL>1x, MOM>0, EMA>=0 - partial position at 25% capital). CRITICAL RULES: Normal entries require sc>=5. Momentum entries (sc>=3 with VOL>1x, MOM>0, EMA>=0) are allowed as partial positions. For sc>=6 tokens: volume spike (VS) and positive momentum (MOM) are NOT required — the strong daily score already confirms quality; trust the trend, especially on dips (PD negative) with EMA>=+1. For sc<6 tokens: VS>1.5x and MOM>0 are still required. divergence=YES is a STRONG CONFIRMATION (price lower low + RSI higher low over last 10 candles). divergence=NO is acceptable for sc>=6 tokens with strong EMA or momentum. AVOID: Tokens with sc<5 (unless momentum entry criteria met). Tokens with no route, failing fundamentals, or obvious scams. Reply ONLY with "YES" or "NO" followed by a brief reason.' },
+            { role: 'user', content: `F&G ${fg.v}/100 ${fg.t}. BUY ${best.sym} (sc=${best.sc}, RSI=${best.r ?? '?'}, MOM=${best.m ?? '?'}, EMA=${best.e ?? '?'}, VOL=${best.v != null ? best.v.toFixed(1) + 'x' : '?'}, VS=${best.vs != null ? best.vs.toFixed(1) + 'x' : '?'}, PD=${best.d ?? '?'}%, divergence=${best.dg ? 'YES' : 'NO'}, ${best.ch >= 0 ? '+' : ''}${best.ch?.toFixed(1) || '?'}% 24h, rule: ${ruleTriggered ? earlyPump(best) ? 'earlyPump' : 'pumpStart' : 'scoring'}). Portfolio: ${pricedPositions.filter(p => p.value > 0.01).map(p => `${p.sym}=$${p.value.toFixed(0)}`).join(', ') || 'empty'}. Recent trades: ${loadTradeHistory().slice(-10).map(t => `${t.type} ${t.sym}${t.pnl !== undefined && t.pnl !== null ? ' (' + (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(1) + ')' : ''}`).join(', ') || 'none'}.` },
           ];
           const aiReply = await deepseek.chat(aiMsg, { maxTokens: 100, temperature: 0.1 });
-          if (aiReply && aiReply.startsWith('NO')) { log(`  🤖 ${aiReply}`); return false; }
+          if (!aiReply) { log(`  ⚠️ DeepSeek unreachable, skipping buy`); aiRejected.add(sym); return false; }
+          if (aiReply.startsWith('NO')) { log(`  🤖 ${aiReply}`); aiRejected.add(sym); return false; }
+          log(`  🤖 ${aiReply}`);
+        } else {
+          log(`  ⚠️ DeepSeek not configured, skipping AI buy validation`);
         }
         log(`Buy ${best.sym} $${buyUsd.toFixed(2)} (#${nonStablePositions.length + 1}/${MAX_POSITIONS})...`);
         const r = await execSwap({ id: USDC_NEAR, sym: 'USDC', dec: 6 }, target, amt.toString(), env.pk, assets);
@@ -1585,51 +1992,69 @@ async function main() {
           const buyB2 = bals.findIndex(b => b.sym === target.sym);
           if (buyB2 >= 0 && r.out) bals[buyB2].human += Number(r.out);
           raisedSyms[target.sym] = Date.now(); saveRaisedSyms(raisedSyms);
+          const isPumpEntry = pumpStart(best) || earlyPump(best);
           const prevCb = costBasis[target.sym];
           costBasis[target.sym] = {
             cost: (prevCb?.cost || 0) + buyUsd,
-            spread: r?.spread || prevCb?.spread || 0,
+            spread: prevCb ? ((prevCb.cost * (prevCb.spread || 0) + buyUsd * (r?.spread || 0)) / (prevCb.cost + buyUsd)) : (r?.spread || 0),
             fee: (prevCb?.fee || 0) + (r?.feeUsd || 0),
             qty: (prevCb?.qty || 0) + outQty,
             price: outQty > 0 ? buyUsd / outQty : (prevCb?.price || 0),
+            pumpEntry: isPumpEntry || (prevCb?.pumpEntry || false),
           };
           saveCostBasis(costBasis);
           const buyPrice = outQty > 0 ? buyUsd / outQty : 0;
           log(`  Cost: $${buyUsd.toFixed(2)} @ $${buyPrice.toFixed(4)}/ea [spread ${r?.spread?.toFixed(2) || 0}%${(r?.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
+          recordTrade('BUY', target.sym, buyUsd, null, null, reason, best.sc);
           holdStart[target.sym] = Date.now();
           markTrade(); return true;
       }
-      // Try decision candidate first, fall back to ranked scan
-      let bought = false;
-      if (buyTargetSym) bought = await tryBuy(buyTargetSym);
-      if (!bought) {
-        const tried = new Set();
-        for (const best of ranked) {
-          if (!(best.sc >= 6 || (best.sc >= 5 && best.m !== undefined && best.m >= 2))) break;
-          if (tried.has(best.sym) || failedTokens.has(best.sym) || raisedSyms[best.sym] || (best.r !== undefined && best.r >= 80) || (best.m !== undefined && best.m < 0) || !routeInv.has(best.sym)) continue;
-          if (heldSyms.has(best.sym)) continue;
-          tried.add(best.sym);
-          if (await tryBuy(best.sym)) break;
-        }
-      }
+      if (buyTargetSym) await tryBuy(buyTargetSym);
     } else if (action === 'TOPUP') {
       const topupSym = reason.split(' ')[2];
       const target = buyEntry(topupSym);
       const pos = nonStablePositions.find(p => p.sym === topupSym);
-      if (target && pos && !failedTokens.has(topupSym) && usdcBal?.human >= MIN_POSITION_VALUE - 0.50) {
+      if (!target) { log(`  ⏭️ ${topupSym} not found in portfolio, skipping topup`); }
+      else if (!pos) { log(`  ⏭️ ${topupSym} not held, skipping topup`); }
+      else if (failedTokens.has(topupSym)) { log(`  ⏭️ ${topupSym} in failedTokens, skipping topup`); }
+      else if (!usdcBal || usdcBal?.human < MIN_TRADE) { log(`  ⏭️ USDC insufficient ($${(usdcBal?.human || 0).toFixed(2)}) for topup`); }
+      else {
         const grandTotal = investableTotal;
         const sortedPos = [...nonStablePositions].sort((a, b) => (b.score || 0) - (a.score || 0));
         const rank = sortedPos.findIndex(p => p.sym === topupSym);
         const maxVal = grandTotal * tierPct(rank, nonStablePositions.length);
         const room = maxVal - pos.value;
-        let buyUsd = Math.max(MIN_POSITION_VALUE - 0.50, Math.min(usdcBal.human, room));
+        let buyUsd = Math.max(MIN_TRADE, Math.min(usdcBal.human, room));
         const amt = Math.floor(buyUsd * 1e6);
-        if (amt >= Math.floor((MIN_POSITION_VALUE - 0.50) * 1e6)) {
+        if (amt >= Math.floor(MIN_TRADE * 1e6)) {
           const liq = await checkLiquidity(USDC_NEAR, target.id, amt.toString());
           if (liq === false) { log(`  ⚠️ ${topupSym} no buy route`); }
           else if (liq === null) { log(`  ⚠️ ${topupSym} buy route check failed (network error), skipping`); }
           else {
             log(`Top up ${topupSym} $${buyUsd.toFixed(2)} (room to $${(room + pos.value).toFixed(2)})...`);
+            // AI validation
+            let deepseekOk = true;
+            if (deepseek.hasKey()) {
+              const cbSym = costBasis[topupSym];
+              const pnlStr = cbSym?.cost > 0 && pos?.value > 0 ? ((pos.value - cbSym.cost) / cbSym.cost * 100).toFixed(1) + '%' : '?';
+              const holdMs = holdStart[topupSym] ? Date.now() - holdStart[topupSym] : -1;
+              const holdStr = holdMs >= 0 ? Math.round(holdMs / 60000) + 'min' : '?';
+              const recentTrades = loadTradeHistory().slice(-5).map(t =>
+                `${t.type} ${t.sym}${t.pnl !== undefined && t.pnl !== null ? ' (' + (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(1) + ')' : ''}`
+              ).join(', ') || 'none';
+              const portfolioStr = pricedPositions.filter(p => p.value > 0.01).map(p => `${p.sym}=$${p.value.toFixed(0)}`).join(', ') || 'empty';
+              const aiMsg = [
+                 { role: 'system', content: 'You are a crypto trading assistant for a momentum/scoring strategy. Validate whether TOPPING-UP (buying more of) an existing position is a good idea. This is not a new position — we already hold this token and are adding capital to reach target allocation. Our buy signals: (1) high score (sc>=7), (2) earlyPump (VOL>1.8x or VS>2x, EMA>=0, 24h>2%), (3) pumpStart (heavy VOL>2.5x or VS>2.5x, EMA=+2, deep dip), (4) strong trend (sc>=6, EMA>=+1, PD<-5% dip in uptrend), (5) momentum entry (sc>=3, VOL>1x, MOM>0, EMA>=0). Normal entries require sc>=5. For sc>=6 tokens: volume and momentum are NOT required — the strong score confirms quality. AVOID: Tokens with sc<5 (unless momentum entry criteria met), overbought RSI>85, or failing fundamentals. Reply ONLY "YES" or "NO" + brief reason.' },
+                { role: 'user', content: `F&G ${fg.v}/100 ${fg.t}. TOPUP ${topupSym} (sc=${pos.score ?? '?'}, RSI=${pos.rsi ?? '?'}, MOM=${pos.mom ?? '?'}, EMA=${pos.e ?? '?'}, VOL=${pos.vol != null ? (typeof pos.vol === 'number' ? pos.vol.toFixed(1) : pos.vol) : '?'}x, P&L=${pnlStr}, held=${holdStr}). Adding $${buyUsd.toFixed(2)} to $${pos.value.toFixed(2)} position. Portfolio: ${portfolioStr}. Recent trades: ${recentTrades}.` },
+              ];
+              const aiReply = await deepseek.chat(aiMsg, { maxTokens: 100, temperature: 0.1 });
+              if (!aiReply) { log(`  ⚠️ DeepSeek unreachable, skipping topup`); deepseekOk = false; }
+              if (aiReply?.startsWith('NO')) { log(`  🤖 ${aiReply}`); deepseekOk = false; }
+              if (deepseekOk && aiReply) log(`  🤖 ${aiReply}`);
+            } else {
+              log(`  ⚠️ DeepSeek not configured, skipping AI topup validation`);
+            }
+            if (deepseekOk) {
             const r = await execSwap({ id: USDC_NEAR, sym: 'USDC', dec: 6 }, target, amt.toString(), env.pk, assets);
             tradedThisCycle = true; if (r?.feeUsd || r?.spread) lastSwapFee += (r.feeUsd || 0);
             if (r?.ok) {
@@ -1641,13 +2066,16 @@ async function main() {
               const outQty = Number(r.out) || 0;
               costBasis[target.sym] = {
                 cost: (prevCb?.cost || 0) + buyUsd,
-                spread: r?.spread || prevCb?.spread || 0,
+                spread: prevCb ? ((prevCb.cost * (prevCb.spread || 0) + buyUsd * (r?.spread || 0)) / (prevCb.cost + buyUsd)) : (r?.spread || 0),
                 fee: (prevCb?.fee || 0) + (r?.feeUsd || 0),
                 qty: (prevCb?.qty || 0) + outQty,
                 price: outQty > 0 ? buyUsd / outQty : (prevCb?.price || 0),
               };
               saveCostBasis(costBasis);
               markTrade();
+              const topupThrottle = loadTopupThrottle();
+              topupThrottle[target.sym] = Date.now();
+              saveTopupThrottle(topupThrottle);
               const buyPrice = outQty > 0 ? buyUsd / outQty : 0;
               log(`  Cost: $${buyUsd.toFixed(2)} @ $${buyPrice.toFixed(4)}/ea [spread ${r?.spread?.toFixed(2) || 0}%${(r?.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
             } else {
@@ -1657,7 +2085,8 @@ async function main() {
         }
       }
     }
-  } else if (action !== 'HOLD' && !canExec) {
+  }
+} else if (action !== 'HOLD' && !canExec) {
     log(`Would ${action} but monitor-only (add JWT to .env)`);
   } else if (action !== 'HOLD' && !ok) {
     log(`Would trade but cooldown`);
@@ -1668,41 +2097,15 @@ async function main() {
     hasPositions = bals.filter(b => b.human > 0 || b.sym === 'USDC');
     pricedPositions = hasPositions.map(h => {
       const p = assetPrice(h.sym);
-      return { ...h, price: p, value: p * h.human, score: h.sym === 'USDC' ? 0 : (assets[h.sym]?.sc || 0), ch: assets[h.sym]?.ch, rsi: rsis[h.sym], mom: moms[h.sym], vol: vols[h.sym], e: ems[h.sym] };
-    });
+    return { ...h, price: p, value: p * h.human, score: h.sym === 'USDC' ? 0 : (assets[h.sym]?.sc || 0), ch: assets[h.sym]?.ch, rsi: rsis[h.sym], mom: moms[h.sym], vol: vols[h.sym], vs: vss[h.sym], e: ems[h.sym], d: pds[h.sym], dg: divergences[h.sym] ?? false };
+  });
   }
 
   // Portfolio summary + P&L (excludes frozen and native NEAR)
   const fundTotal = pricedPositions.filter(p => !frozenSyms.has(p.sym)).reduce((s, p) => s + p.value, 0);
 
-  // Auto-detect external deposits (unexplained USDC increases)
-  let historyForDep = [];
-  try { historyForDep = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')); } catch(e) {}
-  if (!Array.isArray(historyForDep)) historyForDep = [];
-  const lastDep = historyForDep.length > 0 ? historyForDep[historyForDep.length - 1] : null;
-  const prevUSDC = lastDep?.pos?.find(p => p.s === 'USDC')?.q || 0;
-  const curUSDC = usdcBal?.human || 0;
-  const usdcIncrease = curUSDC - prevUSDC;
-  // Check if the USDC increase matches a non-USDC value drop (manual sale, not deposit)
-  const prevNonUsdcVal = (lastDep?.pos || []).filter(p => p.s !== 'USDC').reduce((s, p) => s + p.v, 0);
-  const curNonUsdcVal = pricedPositions.filter(p => p.sym !== 'USDC' && !frozenSyms.has(p.sym)).reduce((s, p) => s + p.value, 0);
-  const nonUsdcDrop = prevNonUsdcVal - curNonUsdcVal;
-  if (usdcIncrease > 1.50 && !tradedThisCycle) {
-    if (nonUsdcDrop > usdcIncrease * 0.5) {
-      log(`  USDC +\$${usdcIncrease.toFixed(2)} matches non-USDC -\$${nonUsdcDrop.toFixed(2)} — not a deposit`);
-    } else {
-      totalDeposits += usdcIncrease;
-      try { fs.writeFileSync(DEPOSITS_FILE, JSON.stringify({ total: totalDeposits })); } catch(e) {}
-      log(`  Detected deposit: $${usdcIncrease.toFixed(2)} → total deposits: $${totalDeposits.toFixed(2)}`);
-      try {
-        let dh = [];
-        try { dh = JSON.parse(fs.readFileSync(DEPOSIT_HISTORY_FILE, 'utf8')); } catch(e) {}
-        if (!Array.isArray(dh)) dh = [];
-        dh.push({ t: new Date().toISOString(), amount: usdcIncrease, reason: 'external deposit' });
-        fs.writeFileSync(DEPOSIT_HISTORY_FILE, JSON.stringify(dh));
-      } catch(e) {}
-    }
-  }
+  // Deposit tracking — manual only (auto-detection disabled: too many false positives from frozen fund recoveries)
+  // Update deposits.json manually when new external deposits are made.
 
   let history = [];
   try { history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')); } catch(e) {}
@@ -1737,18 +2140,24 @@ async function main() {
 
   const monthMidnightUtc = Date.UTC(athensY, athensM, 1) - athensOffset;
 
-  const dailyEntry = history.find(h => new Date(h.t).getTime() >= athensMidnightUtc) || firstFundEntry;
-  const weeklyEntry = daysSinceMonday === 0 ? dailyEntry : (history.find(h => new Date(h.t).getTime() >= mondayMidnightUtc) || firstFundEntry);
-  const monthlyEntry = history.find(h => new Date(h.t).getTime() >= monthMidnightUtc) || firstFundEntry;
+  const dailyEntry = history.find(h => new Date(h.t).getTime() >= athensMidnightUtc)
+    || [...history].reverse().find(h => new Date(h.t).getTime() < athensMidnightUtc)
+    || firstFundEntry;
+  const weeklyEntry = daysSinceMonday === 0 ? dailyEntry : (history.find(h => new Date(h.t).getTime() >= mondayMidnightUtc)
+    || [...history].reverse().find(h => new Date(h.t).getTime() < mondayMidnightUtc)
+    || firstFundEntry);
+  const monthlyEntry = history.find(h => new Date(h.t).getTime() >= monthMidnightUtc)
+    || [...history].reverse().find(h => new Date(h.t).getTime() < monthMidnightUtc)
+    || firstFundEntry;
   const adjDaily = (dailyEntry?.total || 0) - (dailyEntry?.deposits || 0);
   const adjWeekly = (weeklyEntry?.total || 0) - (weeklyEntry?.deposits || 0);
   const adjMonthly = (monthlyEntry?.total || 0) - (monthlyEntry?.deposits || 0);
   const dailyPnl = adjCurrent - adjDaily;
-  const dailyPnlPct = adjDaily > 0 ? (dailyPnl / adjDaily) * 100 : 0;
+  const dailyPnlPct = (dailyEntry?.total || 0) > 0 ? (dailyPnl / (dailyEntry?.total || 1)) * 100 : 0;
   const weeklyPnl = adjCurrent - adjWeekly;
-  const weeklyPnlPct = adjWeekly > 0 ? (weeklyPnl / adjWeekly) * 100 : 0;
+  const weeklyPnlPct = (weeklyEntry?.total || 0) > 0 ? (weeklyPnl / (weeklyEntry?.total || 1)) * 100 : 0;
   const monthlyPnl = adjCurrent - adjMonthly;
-  const monthlyPnlPct = adjMonthly > 0 ? (monthlyPnl / adjMonthly) * 100 : 0;
+  const monthlyPnlPct = (monthlyEntry?.total || 0) > 0 ? (monthlyPnl / (monthlyEntry?.total || 1)) * 100 : 0;
 
   // Accumulate swap fees
   if (typeof lastSwapFee === 'number' && lastSwapFee > 0) accruedFees += lastSwapFee;
@@ -1775,9 +2184,8 @@ async function main() {
       if (cb !== undefined && cb !== null && cb.cost !== undefined && cb.cost > 0) {
         const pnl = p.value - cb.cost;
         const pnlPct = (pnl / cb.cost) * 100;
-        const feeStr = cb.fee > 0 ? `, $${cb.fee.toFixed(4)} fee` : '';
-        const spreadStr = cb.spread > 0 ? ` [buy: ${cb.spread.toFixed(2)}% spread${feeStr}]` : '';
-        pnlStr = ` (${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}, ${pnl >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)${spreadStr}`;
+        const buyInfo = ` [buy: ${cb.spread?.toFixed(2) || '0.00'}% spread, $${cb.fee?.toFixed(4) || '0.0000'} fee]`;
+        pnlStr = ` (${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}, ${pnl >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)${buyInfo}`;
       }
       log(`  ${p.sym}: ${p.human.toFixed(p.sym==='USDC'?2:p.sym==='NEAR'?3:6)} × $${p.price.toFixed(4)} = $${p.value.toFixed(2)}${pnlStr}`);
     }
@@ -1822,7 +2230,7 @@ async function main() {
       downCount,
       routes: routeInv ? routeInv.size : 0,
       top: ranked.slice(0, 15).map(a => ({
-        sym: a.sym, p: a.p, ch: a.ch, sc: a.sc, rsi: a.r, mom: a.m, vol: a.v, ema: a.e, pd: a.d, mc: a.mc
+        sym: a.sym, p: a.p, ch: a.ch, sc: a.sc, rsi: a.r, mom: a.m, vol: a.v, ema: a.e, pd: a.d, vs: a.vs, mc: a.mc
       })),
       portfolio: {
         total: pricedPositions.reduce((s, p) => s + p.value, 0),
@@ -1857,6 +2265,65 @@ async function main() {
       for (const e of routeHealth) rh.push({ ...e, t: ts });
       fs.writeFileSync(ROUTE_HEALTH_FILE, JSON.stringify(rh));
     } catch(e) { log('Route health err:', e.message); }
+  }
+
+  // AI advisor
+  if (deepseek.hasKey()) {
+    const posStr = pricedPositions.filter(p => p.value > 0.01).map(p => {
+      const parts = [`${p.sym}=$${p.value.toFixed(2)}`];
+      if (p.score != null) parts.push(`sc=${p.score}`);
+      if (p.rsi != null) parts.push(`RSI=${p.rsi.toFixed(0)}`);
+      if (p.mom != null) parts.push(`MOM=${p.mom >= 0 ? '+' : ''}${p.mom}`);
+      if (p.vol != null) parts.push(`VOL=${p.vol.toFixed(1)}x`);
+      if (p.vs != null) parts.push(`VS=${p.vs.toFixed(1)}x`);
+      if (p.e != null) parts.push(`EMA=${p.e >= 0 ? '+' : ''}${p.e}`);
+      if (p.d != null) parts.push(`PD=${p.d.toFixed(1)}%`);
+      if (p.dg != null && !p.sym.startsWith('USDC')) parts.push(`DG=${p.dg ? 'YES' : 'NO'}`);
+      return parts.join(' ');
+    }).join('; ');
+    const topCandidates = ranked.filter(a => routeInv.has(a.sym) && a.sym !== 'NEAR' && !STABLE_SYMS.has(a.sym));
+    const top3 = topCandidates.slice(0, 3);
+    const top8 = topCandidates.slice(0, 8);
+    const topList = top3.map(a =>
+      `${a.sym}(sc=${a.sc || '?'}, ${a.ch != null ? (a.ch >= 0 ? '+' : '') + a.ch.toFixed(1) + '%' : '?'}, DG=${a.dg ? 'YES' : 'NO'})`
+    ).join(', ');
+    const assetMetrics = topCandidates.slice(0, 10).map(a => {
+      const p = [];
+      p.push(`sc=${a.sc || '?'}`);
+      if (a.r != null) p.push(`RSI=${a.r.toFixed(0)}`);
+      if (a.m != null) p.push(`MOM=${a.m >= 0 ? '+' : ''}${a.m}`);
+      if (a.v != null) p.push(`VOL=${a.v.toFixed(1)}x`);
+      if (a.vs != null) p.push(`VS=${a.vs.toFixed(1)}x`);
+      if (a.e != null) p.push(`EMA=${a.e >= 0 ? '+' : ''}${a.e}`);
+      if (a.d != null) p.push(`PD=${a.d.toFixed(1)}%`);
+      if (a.ch != null) p.push(`ch=${a.ch >= 0 ? '+' : ''}${a.ch.toFixed(1)}%`);
+      p.push(`DG=${a.dg ? 'YES' : 'NO'}`);
+      return `${(a.sym + ':').padEnd(10)} ${p.join(', ')}`;
+    }).join('\n');
+    const greenCount = top8.filter(a => a.ch != null && a.ch > 0).length;
+    const avgCh = top8.length > 0 ? top8.reduce((s, a) => s + (a.ch || 0), 0) / top8.length : 0;
+    const breadth = `${greenCount}/${top8.length} green, avg ${avgCh >= 0 ? '+' : ''}${avgCh.toFixed(2)}%`;
+    const topEmaSignals = ranked.slice(0, 15).filter(a => a.e != null).map(a => a.e);
+    const bullCount = topEmaSignals.filter(e => e >= 0).length;
+    const mktTrend = topEmaSignals.length === 0 ? 'neutral' :
+      bullCount / topEmaSignals.length > 0.6 ? 'bullish' :
+      bullCount / topEmaSignals.length < 0.3 ? 'bearish' : 'neutral';
+    const capital = (investableTotal - (usdcBal?.value || 0)).toFixed(2);
+    const perfStr = `Start ${pnlFromInit >= 0 ? '+' : ''}${pnlFromInitPct.toFixed(2)}% | Daily ${dailyPnl >= 0 ? '+' : ''}${dailyPnlPct.toFixed(2)}% | Month ${monthlyPnl >= 0 ? '+' : ''}${monthlyPnlPct.toFixed(2)}%`;
+    const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    let prevTop = '', prevTs = '';
+    try {
+      const snap = JSON.parse(fs.readFileSync(path.join(PROJECT, '.advisor_snapshot.json'), 'utf8'));
+      prevTop = snap.top || '';
+      prevTs = snap.ts || '';
+    } catch(e) {}
+    const msg = [
+      { role: 'system', content: 'You are a crypto trading advisor auditing an automated trading agent. Your task is to critically evaluate the agent\'s decision against the provided market data.\n\nCRITICAL RULES:\n1. Never call a trend "bullish" unless at least 60% of top assets are green with volume > 1.5x\n2. Distinguish between accumulation (volume up + price up) and low-volume bounces (volume down + price flat/up)\n3. F&G < 20 alone is NOT a buy signal - require at least two additional confirmations\n4. Use the RSI, MOM, VOL, VS, EMA, and PD values from the data - do not claim they\'re missing\n5. If you can\'t make a confident recommendation, say "NO TRADE - conditions unclear"\n\nYou must:\n1. Identify whether the agent\'s decision was correct, wrong, or incomplete given market conditions\n2. Explain WHY using specific metrics (RSI, MOM, VOL, VS, EMA, PD, F&G)\n3. Flag any missed opportunities or false signals in the data\n4. Suggest ONE concrete improvement to the agent\'s decision logic\n\nBe decisive. Avoid vague language like "monitor" or "could be". If you can\'t confidently recommend a trade, say "NO TRADE" and explain why.' },
+      { role: 'user', content: `MARKET CONTEXT:\n- Fear & Greed: ${fg.v}/100 (${fg.t})\n- Trend: ${mktTrend}\n- Breadth: ${breadth}\n\nAGENT DECISION:\n- Action: ${action || 'HOLD'}\n- Reasoning: ${reason || 'no reason given'}\n\nPORTFOLIO:\n- Position: ${posStr || 'empty'}\n- Capital: $${capital}\n- Value: $${fundTotal.toFixed(2)}\n- Performance: ${perfStr}\n\nTOP ASSETS (${ts}):\n${topList || 'none'}\n\nASSET METRICS:\n${assetMetrics || 'none'}\n\nHISTORICAL (${prevTs || 'N/A'}):\n${prevTop || 'none'}\n\nTASK:\nAnalyze if the agent's HOLD decision was correct given:\n\n1. Are any assets showing genuine accumulation? (VOL > 1.5x AND price up > 1% AND MOM > 0)\n2. Are any assets showing distribution? (VOL > 1.5x AND price flat/down AND MOM < 0)\n3. Are any assets oversold? (RSI < 30 AND VOL > 1.5x - potential bounce)\n4. Are any assets breaking out? (RSI > 70 AND VOL > 2x - momentum continuation)\n5. Is EMA direction supporting the move? (EMA:+0 = neutral, EMA:+1 = bullish, EMA:-1 = bearish)\n6. Is PD (potential drop) signaling risk? (PD > -10% = high risk of further downside)\n7. Are any existing positions ready for profit-taking? Check each position\'s P&L (from posStr), RSI (overbought >70), MOM (turning negative after a run-up), VOL (declining volume on a rally = weak exit signal). Flag specific positions to sell if P&L > 5% AND (RSI > 70 OR MOM ≤ 0).\n\nProvide structured output:\nDECISION: [AGREE/DISAGREE/PARTIALLY]\nREASONING: [2-3 sentences with specific metrics from the data]\nMISSED OPPORTUNITY: [Yes/No - if Yes, which asset and why]\nIMPROVEMENT SUGGESTION: [1 specific rule change]` },
+    ];
+    const reply = await deepseek.chat(msg, { maxTokens: 600 });
+    if (reply) { log(''); log('='.repeat(105)); log('  AI ADVISOR'); log('='.repeat(105)); log(`  ${reply}`); }
+    try { fs.writeFileSync(path.join(PROJECT, '.advisor_snapshot.json'), JSON.stringify({ top: topList, ts: new Date().toISOString() })); } catch(e) {}
   }
 
   log('=== DONE ===');
