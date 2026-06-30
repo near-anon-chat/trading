@@ -314,6 +314,13 @@ Runs every **5 minutes** via cron. Monitors market + portfolio and executes swap
 ## Status: Live (swap execution enabled)
 Agent checks every 5 min and trades when conditions trigger. JWT is set in `.env`.
 
+## Changes — June 30
+1. **XLM made buyable (momentum entry)**: `momentumBuyable()` added to display ✅ gate — XLM (sc=4, MOM:+1, VOL≥1x, EMA≥0, RSI<80) now shows buyable and is eligible as a partial momentum position.
+2. **Profit preservation DeepSeek check**: Every cycle when agent HOLDs, fires a profit-preservation prompt to DeepSeek checking each position's P&L, RSI, MOM. Overrides action to SELL if DeepSeek flags a position for profit-taking or stop-loss. Prompt rules: SELL if P&L>5% AND (RSI>70 OR MOM≤0), SELL if RSI>85, SELL if P&L<-8%, SELL if positive P&L with fading momentum.
+3. **HOLD no-positions DeepSeek trigger**: Profit preservation check also fires when reason is "No positions, waiting for crypto opp" — covers the case where the agent is idle.
+4. **Buy rule type fix**: `rule:` field in DeepSeek buy validation prompt now correctly reports `momentum`/`accumulation` entry type instead of always falling back to `scoring`. Prevents AI from applying standard-entry VS requirements to momentum entries.
+5. **Alternative buy suggestion**: When DeepSeek rejects a BUY (says "NO") and suggests an alternative as `MISSED OPPORTUNITY: Yes – SYMBOL`, the agent immediately tries to buy the suggested token in the same cycle. The system prompt now includes TOP CANDIDATES (top 5 tokens with full RSI/MOM/VOL/VS/EMA/PD/ch/DG metrics) so DeepSeek has concrete data for alternatives.
+
 ## Bugfixes — June 28
 1. **TOPUP sc gate + throttle**: TOPUP now requires `sc >= 5` (was 3) plus a 1-hour cooldown per position (`topup_throttle.json`). Tokens with `sc < 7` also need VOL > 1.0x OR MOM > 0 OR EMA >= 0 — prevents topping up dead-volume positions.
 2. **CG cache persistence**: `fetchCGData()` now persists to `.cg_cache.json` on disk. Survives process restart. On stale/failed CG API calls, falls back to file cache.

@@ -44,8 +44,6 @@ const RPC_ENDPOINTS = [
   'https://rpc.mainnet.near.org',
   'https://archival-rpc.mainnet.near.org',
 ];
-const JUNK_HOLD_MS = 30 * 60 * 1000;
-const JUNK_FILE = path.join(PROJECT, '.junk_timers.json');
 const OB_HOLD_MS = 30 * 60 * 1000;
 const OB_FILE = path.join(PROJECT, '.ob_timers.json');
 const TRADE_HISTORY_FILE = path.join(PROJECT, '.trade_history.json');
@@ -606,10 +604,11 @@ async function checkLiquidity(fromId, toId, rawAmount) {
       refundTo: ACCOUNT, refundType: 'INTENTS',
       depositType: 'INTENTS', deadline: dl,
     };
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       const r = await httpPost('https://1click.chaindefuser.com/v0/quote', body, { 'Authorization': `Bearer ${jwt}` });
       if (r.d?.quote?.amountOut != null) return true;
-      if (attempt === 0) await sleep(2000);
+      if (r.s < 400) return false;
+      await sleep(2000);
     }
     return false;
   } catch(e) { return null; } // null = network error
@@ -688,8 +687,11 @@ function buyable(a, failedTokens, routeInv) {
   if (a.sc == null || a.sc < 5) return false;
   if (failedTokens.has(a.sym) || !routeInv.has(a.sym) || recentlySold(a.sym)) return false;
   if (a.sc < 6) {
-    if (a.vs == null || a.vs < 1.5) return false;
-    if (a.m == null || a.m <= 0) return false;
+    if (a.v == null || a.v < 2) {
+      if (a.vs == null || a.vs < 1.5) return false;
+    }
+  if (a.sc >= 5) { if (a.m == null || a.m < 0) return false; }
+  else { if (a.m == null || a.m <= 0) return false; }
   }
   if (a.r != null && a.r >= 80) return false;
   if (a.sc < 7) {
@@ -804,7 +806,7 @@ async function validateSell(sym, reason, position, fg, portfolio, holdStartMap) 
   const cbSym = position?.sym ? costBasisLocal[position.sym] : null;
   const pnlStr = cbSym?.cost > 0 && position?.value > 0 ? ((position.value - cbSym.cost) / cbSym.cost * 100).toFixed(1) + '%' : '?';
   const aiMsg = [
-    { role: 'system', content: 'You are a crypto trading assistant. Validate whether SELLING the given token is a good idea. Sell triggers: (1) overbought (RSI>92), (2) low score (<4) — JUNK SELL: triggered after a 30-min timer expires. The AI may approve or reject. If rejected, the timer resets for another 30 min — only reject if the token shows genuine recovery potential (e.g., score improved, momentum turned positive, market conditions changed), (3) sharp drop (MOM=-2), (4) volatile drop (VOL>3x+MOM<0 or VS>3x+price drop), (5) EMA crash (EMA=-2), (6) pump end, (7) emergency crash, (8) risk-off (F&G<30+broad red), (9) rotation (replace weakest), (10) raise USDC (sell to buy better), (11) rotation upgrade: selling an underperforming position (sc<4 OR (VOL<1.0x AND MOM≤0)) to fund a momentum/breakout entry (target VOL>1.5x, MOM>0, EMA≥0) is VALID even if held <2h because dead-volume opportunity cost outweighs the spread, (12) take-profit: staged TP system sells 1/3 at RSI>75 (tier1), 1/3 at RSI>82 (tier2), and all at RSI>92 (tier3). TIER1 AND TIER2 ARE MECHANICAL RISK-MANAGEMENT RULES — approve unless extraordinary circumstances (e.g., token just entered a strong breakout with VOL>2.0x and MOM>0 and price breaking out to new highs). You keep 2/3 of the position after tier1/tier2, so there is still upside exposure. Rejecting TP sells causes positions to be held until they turn junk and lose all profit — this is the main failure pattern to avoid. Low-volume overbought rallies (VOL<1.0x, MOM>0) should STILL be sold — taking partial profit on a low-volume pump is correct risk management. DIVERGENCE RULE: If divergence=YES (bullish divergence), consider HOLDING longer unless other sell signals are overwhelming. If divergence=NO and price is stalling (MOM=0, RSI declining), take profit. VOL=price volatility (price swings), VS=actual trading volume spike. Avoid churn: selling recently-bought tokens early wastes spread. Reply ONLY "YES" or "NO" + brief reason.' },
+    { role: 'system', content: 'You are a crypto trading assistant. Validate whether SELLING the given token is a good idea. Sell triggers: (1) overbought (RSI>92), (2) low score (<4) — JUNK SELL: triggered immediately when score drops below 4. Do NOT approve if the token has active price action (RSI > 70, VOL > 1.0x, or MOM > 0) — these indicate genuine recovery potential regardless of score. A score of 3 with RSI=78 and VOL=1.3x is not junk, it is a position with real trading activity. Only approve junk sell when the token is genuinely dead: low RSI (< 50), low volume (< 0.8x), and negative or flat momentum, (3) sharp drop (MOM=-2), (4) volatile drop (VOL>3x+MOM<0 or VS>3x+price drop), (5) EMA crash (EMA=-2), (6) pump peak exit: sells pump-entry positions after the peak has passed (PD <= -2% AND MOM <= 0). The token rose from a pump entry, peaked, and is now declining — momentum confirms the fade. Do NOT sell at PD=0 (still at peak with active momentum — premature), (7) emergency crash, (8) risk-off (F&G<30+broad red), (9) rotation (replace weakest), (10) raise USDC (sell to buy better), (11) rotation upgrade: selling an underperforming position (sc<4 OR (VOL<1.0x AND MOM≤0)) to fund a momentum/breakout entry (target VOL>1.5x, MOM>0, EMA≥0) is VALID even if held <2h because dead-volume opportunity cost outweighs the spread, (12) take-profit: staged TP system sells 1/3 at RSI>75 (tier1), 1/3 at RSI>82 (tier2), and all at RSI>92 (tier3). TIER1 AND TIER2 ARE MECHANICAL RISK-MANAGEMENT RULES — approve unless extraordinary circumstances (e.g., token just entered a strong breakout with VOL>2.0x and MOM>0 and price breaking out to new highs). You keep 2/3 of the position after tier1/tier2, so there is still upside exposure. Rejecting TP sells causes positions to be held until they turn junk and lose all profit — this is the main failure pattern to avoid. Low-volume overbought rallies (VOL<1.0x, MOM>0) should STILL be sold — taking partial profit on a low-volume pump is correct risk management. (13) weak overbought exit (rolling over): RSI>75 AND MOM≤0 AND VOL<1.0x — the rally is stalling on low volume, momentum is fading. Approve as a mechanical exit signal. DIVERGENCE RULE: If divergence=YES (bullish divergence), consider HOLDING longer unless other sell signals are overwhelming. If divergence=NO and price is stalling (MOM=0, RSI declining), take profit. VOL=price volatility (price swings), VS=actual trading volume spike. Avoid churn: selling recently-bought tokens early wastes spread. Reply ONLY "YES" or "NO" + brief reason.' },
     { role: 'user', content: `F&G ${fg?.v ?? '?'}/100 ${fg?.t ?? '?'}. SELL ${sym} (${reason}, sc=${position?.score ?? '?'}, RSI=${position?.rsi ?? '?'}, MOM=${position?.mom ?? '?'}, EMA=${position?.e ?? '?'}, VOL=${position?.vol != null ? position.vol.toFixed(1) + 'x' : '?'}, VS=${position?.vs != null ? position.vs.toFixed(1) + 'x' : '?'}, PD=${position?.d ?? '?'}%, P&L=${pnlStr}, held=${holdStr}, divergence=${position?.dg ? 'YES' : 'NO'}). Portfolio: ${(portfolio || []).filter(p => p.value > 0.01).map(p => `${p.sym}=$${p.value.toFixed(0)}`).join(', ') || 'empty'}. Recent trades: ${recentTrades || 'none'}.` },
   ];
   const aiReply = await deepseek.chat(aiMsg, { maxTokens: 100, temperature: 0.1 });
@@ -840,18 +842,6 @@ function logRouteChange(sym, event, detail) {
   const msg = `[${new Date().toISOString()}] ${sym} ${event}${detail ? ' — ' + detail : ''}`;
   console.log(`  📋 ${msg}`);
   try { fs.appendFileSync(NO_ROUTE_LOG, msg + '\n'); } catch(e) {}
-}
-
-function loadJunkTimers() {
-  try { return JSON.parse(fs.readFileSync(JUNK_FILE, 'utf8')); } catch(e) { return {}; }
-}
-
-function saveJunkTimers(timers) {
-  const now = Date.now();
-  for (const [k, v] of Object.entries(timers)) {
-    if (now - v >= JUNK_HOLD_MS) delete timers[k];
-  }
-  try { fs.writeFileSync(JUNK_FILE, JSON.stringify(timers)); } catch(e) {}
 }
 
 function loadObTimers() {
@@ -998,6 +988,45 @@ async function main() {
       }
       saveRouteInventoryCache(routeInv);
     }
+    // Discover tokens with CG IDs not in routeInv — scan 2 per cycle
+    const allList = loadTradeableTokens();
+    const missed = allList.filter(t => !routeInv.has(t.sym) && CG_IDS[t.sym] && !t.sym.endsWith('on') && t.sym !== 'TON');
+    if (missed.length > 0) {
+      const batch = missed.slice(0, 2);
+      for (const t of batch) {
+        const buyAmt = Math.floor(MIN_POSITION_VALUE * 1e6).toString();
+        const sellAmt = Math.floor(MIN_POSITION_VALUE * 10 ** t.dec).toString();
+        try {
+          const dl = new Date(Date.now() + 86400000).toISOString().replace(/\.\d+Z/, '.000Z');
+          const r = await httpPost('https://1click.chaindefuser.com/v0/quote', {
+            dry: true, swapType: 'EXACT_INPUT', depositMode: 'SIMPLE',
+            originAsset: USDC_NEAR, destinationAsset: t.id,
+            amount: buyAmt, slippageTolerance: 100,
+            recipient: ACCOUNT, recipientType: 'INTENTS',
+            refundTo: ACCOUNT, refundType: 'INTENTS',
+            depositType: 'INTENTS', deadline: dl,
+          }, { 'Authorization': `Bearer ${env.jwt}` });
+          if (r.d?.quote?.amountOut != null) {
+            await sleep(1000);
+            const s = await httpPost('https://1click.chaindefuser.com/v0/quote', {
+              dry: true, swapType: 'EXACT_INPUT', depositMode: 'SIMPLE',
+              originAsset: t.id, destinationAsset: USDC_NEAR,
+              amount: sellAmt, slippageTolerance: 100,
+              recipient: ACCOUNT, recipientType: 'INTENTS',
+              refundTo: ACCOUNT, refundType: 'INTENTS',
+              depositType: 'INTENTS', deadline: dl,
+            }, { 'Authorization': `Bearer ${env.jwt}` });
+            if (s.d?.quote?.amountOut != null) {
+              log(`  ✅ ${t.sym} route discovered (sweep)!`);
+              logRouteChange(t.sym, 'discovered');
+              routeInv.add(t.sym);
+            }
+          }
+        } catch(e) {}
+        await sleep(1000);
+      }
+      saveRouteInventoryCache(routeInv);
+    }
   }
 
   // Market data
@@ -1074,7 +1103,7 @@ async function main() {
   const costBasis = loadCostBasis();
   const flapSyms = loadFlapSyms();
   const failCooldown = loadFailCooldown();
-  let junkTimers = loadJunkTimers();
+  let junkTimers = {};
   let obTimers = loadObTimers();
   let frozenSyms = new Set();
   try { frozenSyms = new Set(JSON.parse(fs.readFileSync(FROZEN_FILE, 'utf8'))); } catch(e) {}
@@ -1169,7 +1198,7 @@ async function main() {
     const emaStr = emaIcon + (a.e !== undefined && a.e !== null ? `EMA:${a.e >= 0 ? '+' : ''}${a.e}` : '').padEnd(6);
     const pdStr = a.d !== undefined && a.d !== null ? `PD:${a.d.toFixed(1)}%` : '';
     const dgStr = `DG=${a.dg ? 'YES' : 'NO'}`;
-    const isBuyable = buyable(a, failedTokens, routeInv) || divergenceBuyable(a, failedTokens, routeInv);
+    const isBuyable = buyable(a, failedTokens, routeInv) || divergenceBuyable(a, failedTokens, routeInv) || momentumBuyable(a, failedTokens, routeInv);
     if (isBuyable) buyableCount.count++;
     log(`  ${a.sym.padEnd(11)} sc=${a.sc}   $${(a.p?.toFixed(4)||'?').padStart(10)}  ${(a.ch?.toFixed(1)||'?').padStart(6)}%  ${rsiStr} ${momStr} ${volStr} ${vsStr} ${emaStr} ${pdStr} ${dgStr} ${isBuyable ? '✅' : '❌'}`);
   });
@@ -1209,7 +1238,7 @@ async function main() {
                 log(`  ✅ Recovered ${sym} → ${r.out} USDC`);
                 recordTrade('SELL', sym, proceeds, proceeds - cb.cost, cb.cost > 0 ? (proceeds - cb.cost) / cb.cost * 100 : 0, 'recovery', null);
                 delete costBasis[sym];
-                delete junkTimers[sym]; delete obTimers[sym];
+                delete obTimers[sym];
                 saveCostBasis(costBasis);
                 const tpStRec = loadTpState(); if (tpStRec[sym]) { delete tpStRec[sym]; saveTpState(tpStRec); }
                 markTrade();
@@ -1237,7 +1266,7 @@ async function main() {
   });
   for (const p of pricedPositions) {
     const cb = costBasis[p.sym];
-    if (cb && cb.qty > 0 && p.human > 0) {
+      if (cb && cb.qty > 0 && p.human > 0) {
       const ratio = p.human / cb.qty;
       if (ratio > 1.2 || ratio < 0.8) {
         log(`  ⚠️ ${p.sym} cost basis reset (qty ${cb.qty.toFixed(4)} → ${p.human.toFixed(4)}, cost ${cb.cost.toFixed(2)} → ${p.value.toFixed(2)})`);
@@ -1245,6 +1274,7 @@ async function main() {
         cb.qty = p.human;
       }
     }
+    if (p.d !== undefined && p.d >= 0 && costBasis[p.sym]) costBasis[p.sym].reachedPeak = true;
   }
   saveCostBasis(costBasis);
   const totalValue = pricedPositions.reduce((s, p) => s + p.value, 0);
@@ -1319,14 +1349,8 @@ async function main() {
   } else if (!healthyPriceData) {
     action = 'HOLD'; reason = 'Degraded mode: price data unreliable';
   } else if (nonStablePositions.length > 0) {
-    // Track score dips for junk hold timer
+    // Overbought timer: start when RSI > 92 & sc < 7, clear when condition no longer met
     for (const p of nonStablePositions) {
-      if (hasRealScores && p.score >= 4) {
-        if (junkTimers[p.sym]) { delete junkTimers[p.sym]; log(`  ${p.sym} recovered (sc=${p.score}), cleared junk timer`); }
-      } else if (hasRealScores && p.score < 4 && !p.dg) {
-        if (!junkTimers[p.sym]) { junkTimers[p.sym] = Date.now(); log(`  ${p.sym} junk timer started (sc=${p.score})`); }
-      }
-      // Overbought timer: start when RSI > 92 & sc < 7, clear when condition no longer met
       const isOb = p.rsi !== undefined && p.rsi > 92 && p.score < 7;
       if (isOb) {
         if (!obTimers[p.sym]) { obTimers[p.sym] = Date.now(); log(`  ${p.sym} OB timer started (RSI=${p.rsi.toFixed(0)} sc=${p.score})`); }
@@ -1334,30 +1358,21 @@ async function main() {
         if (obTimers[p.sym]) { delete obTimers[p.sym]; log(`  ${p.sym} no longer OB, cleared timer`); }
       }
     }
-    saveJunkTimers(junkTimers);
-    // Log active junk timers with remaining time
-    for (const [sym, ts] of Object.entries(junkTimers)) {
-      const remaining = Math.max(0, JUNK_HOLD_MS - (Date.now() - ts));
-      const min = Math.floor(remaining / 60000);
-      const sec = Math.floor((remaining % 60000) / 1000);
-      const pos = nonStablePositions.find(p => p.sym === sym);
-      log(`  ⏳ ${sym} junk sell in ~${min}:${sec.toString().padStart(2, '0')} (sc=${pos?.score ?? '?'})`);
-    }
     saveObTimers(obTimers);
     // Urgent sells first (OB, sharp drop, volatile drop, EMA crash, pump end, crash)
     for (const p of nonStablePositions) {
-      if (p.m !== undefined && p.m === -2) { action = 'SELL'; reason = `${p.sym} sharp drop MOM=${p.m}`; break; }
-      if (p.vol !== undefined && p.vol > 3 && p.m !== undefined && p.m < 0 && !p.dg) { action = 'SELL'; reason = `${p.sym} volatile drop VOL=${p.vol.toFixed(1)}x MOM=${p.m}`; break; }
+      if (p.mom !== undefined && p.mom === -2) { action = 'SELL'; reason = `${p.sym} sharp drop MOM=${p.mom}`; break; }
+      if (p.vol !== undefined && p.vol > 3 && p.mom !== undefined && p.mom < 0 && !p.dg) { action = 'SELL'; reason = `${p.sym} volatile drop VOL=${p.vol.toFixed(1)}x MOM=${p.mom}`; break; }
       if (p.e !== undefined && p.e === -2) { action = 'SELL'; reason = `${p.sym} EMA crash`; break; }
-      if (p.pd !== undefined && p.pd < -2) { action = 'SELL'; reason = `${p.sym} trailing stop PD=${p.pd.toFixed(1)}%`; break; }
-      if (p.pd !== undefined && p.pd > -2 && p.vol !== undefined && p.vol > 2.5 && p.rsi !== undefined && p.rsi > 80 && p.e !== undefined && p.e <= 0) {
-        action = 'SELL'; reason = `${p.sym} pump end PD=${p.pd.toFixed(0)}% VOL=${p.vol.toFixed(1)}x RSI=${p.rsi.toFixed(0)}`; break;
+      if (p.d !== undefined && p.d < -2 && costBasis[p.sym]?.reachedPeak) { action = 'SELL'; reason = `${p.sym} trailing stop PD=${p.d.toFixed(1)}%`; break; }
+      if (p.d !== undefined && p.d > -2 && p.vol !== undefined && p.vol > 2.5 && p.rsi !== undefined && p.rsi > 80 && p.e !== undefined && p.e <= 0) {
+        action = 'SELL'; reason = `${p.sym} pump end PD=${p.d.toFixed(0)}% VOL=${p.vol.toFixed(1)}x RSI=${p.rsi.toFixed(0)}`; break;
       }
-      if (costBasis[p.sym]?.pumpEntry && p.pd !== undefined && p.pd >= -1) {
-        action = 'SELL'; reason = `${p.sym} pump peak PD=${p.pd.toFixed(1)}%`; break;
+      if (costBasis[p.sym]?.pumpEntry && p.d !== undefined && p.d <= -2 && p.mom !== undefined && p.mom <= 0) {
+        action = 'SELL'; reason = `${p.sym} pump peak passed PD=${p.d.toFixed(1)}% MOM=${p.mom}`; break;
       }
-      if (p.pd !== undefined && p.pd > -5 && p.e === -2) {
-        action = 'SELL'; reason = `${p.sym} crash PD=${p.pd.toFixed(0)}% EMA:-2`; break;
+      if (p.d !== undefined && p.d > -5 && p.e === -2) {
+        action = 'SELL'; reason = `${p.sym} crash PD=${p.d.toFixed(0)}% EMA:-2`; break;
       }
     }
     // Take-profit tiers (after urgent defensive, before rotation)
@@ -1372,6 +1387,14 @@ async function main() {
         if (p.rsi > 92) { action = 'SELL'; reason = `${p.sym} TP tier3 RSI=${p.rsi.toFixed(0)}`; tpSell = { sym: p.sym, fraction: 1.0, tier: 'tier92' }; break; }
         if (!state.tier82 && p.rsi > 82 && pnlPct > 0) { action = 'SELL'; reason = `${p.sym} TP tier2 RSI=${p.rsi.toFixed(0)}`; tpSell = { sym: p.sym, fraction: 1/3, tier: 'tier82' }; break; }
         if (!state.tier75 && p.rsi > 75 && pnlPct > 0) { action = 'SELL'; reason = `${p.sym} TP tier1 RSI=${p.rsi.toFixed(0)}`; tpSell = { sym: p.sym, fraction: 1/3, tier: 'tier75' }; break; }
+      }
+    }
+    // Weak overbought exit: RSI>75, momentum stalled/negative, low volume (rolling over)
+    if (action === 'HOLD') {
+      for (const p of nonStablePositions) {
+        if (p.rsi != null && p.rsi > 75 && p.mom !== undefined && p.mom <= 0 && p.vol !== undefined && p.vol < 1.0) {
+          action = 'SELL'; reason = `${p.sym} weak overbought RSI=${p.rsi.toFixed(0)} MOM=${p.mom} VOL=${p.vol.toFixed(1)}x`; break;
+        }
       }
     }
     // Then check rotation before marginal junk sell
@@ -1399,7 +1422,7 @@ async function main() {
     // Junk sell as last resort (only if no rotation target found)
     if (action === 'HOLD') {
       for (const p of nonStablePositions) {
-        if (hasRealScores && p.score < 4 && !p.dg && Date.now() - (junkTimers[p.sym] || 0) >= JUNK_HOLD_MS) { action = 'SELL'; reason = `${p.sym} junk sc=${p.score}`; break; }
+        if (hasRealScores && p.score < 4 && !p.dg) { action = 'SELL'; reason = `${p.sym} junk sc=${p.score}`; break; }
       }
     }
     // Risk-off: broad market crash → all to USDC
@@ -1500,6 +1523,35 @@ async function main() {
 
   log(`Decision: ${action} — ${reason}`);
 
+  // Profit preservation check: when holding, ask DeepSeek if any position should be sold to lock in profits
+  if (action === 'HOLD' && deepseek.hasKey()) {
+    const profitCheckPositions = nonStablePositions.filter(p => p.value >= MIN_TRADE);
+    if (profitCheckPositions.length > 0 || reason.includes('No positions')) {
+      const posStr = profitCheckPositions.map(p => {
+        const cb = costBasis[p.sym];
+        const pnlPct = cb?.cost > 0 && p.value > 0 ? ((p.value - cb.cost) / cb.cost * 100) : null;
+        const pnlStr = pnlPct !== null ? (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%' : '?';
+        return `${p.sym}=$${p.value.toFixed(2)} P&L=${pnlStr} RSI=${p.rsi ?? '?'} MOM=${p.mom ?? '?'} VOL=${p.vol != null ? p.vol.toFixed(1) + 'x' : '?'} EMA=${p.e != null ? (p.e >= 0 ? '+' : '') + p.e : '?'}`;
+      }).join('; ') || 'No non-stable positions (all USDC)';
+      const profitMsg = [
+        { role: 'system', content: 'You are a crypto profit-preservation assistant. Your only job is to identify positions that should be sold NOW to lock in profits or cut losses.\n\nRULES:\n1. SELL if P&L > 5% AND (RSI > 70 OR MOM ≤ 0) — profit is there but momentum is fading\n2. SELL if RSI > 85 — overbought, take profits before reversal\n3. SELL if P&L < -8% — stop loss, prevent further damage\n4. SELL if P&L > 0 AND MOM < 0 AND RSI declining — momentum-entry profit is stalling, exit\n5. HOLD if positive P&L with MOM > 0 and RSI < 75 — room to run\n6. HOLD if RSI < 70 with negative P&L but MOM > 0 — recovery possible\n7. SELL if P&L > 0 AND PD (peak distance) > -2% AND MOM < 0 — price rolled over from recent high\n\nReply SELL:<symbol> or HOLD. If multiple, list SELL:<sym1>, SELL:<sym2>. If none needed: "HOLD - no action needed".' },
+        { role: 'user', content: `Agent decision: HOLD — ${reason}. Portfolio positions: ${posStr}. F&G: ${fg.v}/100 ${fg.t}.` },
+      ];
+      const profitReply = await deepseek.chat(profitMsg, { maxTokens: 100, temperature: 0.1 });
+      if (profitReply) {
+        log('  PROFIT CHECK: ' + profitReply);
+        if (profitReply.includes('SELL:')) {
+          const sellSyms = profitReply.match(/SELL:(\w+)/g)?.map(s => s.replace('SELL:', ''));
+          if (sellSyms && sellSyms.length > 0) {
+            action = 'SELL';
+            reason = `${sellSyms[0]} profit preservation (${sellSyms.join(',')})`;
+            log(`  🎯 DeepSeek recommends selling ${sellSyms.join(', ')}, overriding to SELL`);
+          }
+        }
+      }
+    }
+  }
+
   // Execute
   let lastSwapFee = 0, tradedThisCycle = false;
   let newFailedTokens = new Set();
@@ -1510,9 +1562,13 @@ async function main() {
       for (const p of nonStablePositions) {
         if (p.value < MIN_TRADE) continue;
         const liq = await checkLiquidity(p.id, USDC_NEAR, p.raw);
-        if (liq === false) { log(`  ⚠️ ${p.sym} has no sell route, marking failed`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); continue; }
+        if (liq === false) {
+          if (costBasis[p.sym]) { log(`  ⚠️ ${p.sym} sell route transient, will retry next cycle`); }
+          else { log(`  ⚠️ ${p.sym} has no sell route, marking failed`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); }
+          continue;
+        }
         if (liq === null) { log(`  ⚠️ ${p.sym} sell route check failed (network error), skipping`); continue; }
-        if (!await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) { log(`  Skipped (AI rejected)`); if (reason.includes('junk')) { junkTimers[p.sym] = Date.now(); log(`  ${p.sym} junk timer reset (AI rejected)`); } continue; }
+        if (!await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) { log(`  Skipped (AI rejected)`); continue; }
         log(`Sell ${p.sym}→USDC...`);
         const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, p.raw, env.pk, assets);
         tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1528,7 +1584,7 @@ async function main() {
             log(`  ✅ Sold ${p.sym} → ${r.out} USDC (${spnl >= 0 ? '+' : ''}$${spnl.toFixed(2)}, ${spnl >= 0 ? '+' : ''}${(spnl / scb.cost * 100).toFixed(1)}%) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
             recordTrade('SELL', p.sym, sp, spnl, spnl / scb.cost * 100, 'risk-off', p.score);
           }
-          delete costBasis[p.sym]; delete junkTimers[p.sym]; delete obTimers[p.sym]; saveCostBasis(costBasis); const tpStSa = loadTpState(); if (tpStSa[p.sym]) { delete tpStSa[p.sym]; saveTpState(tpStSa); } delete holdStart[p.sym]; markTrade(); break;
+          delete costBasis[p.sym]; delete obTimers[p.sym]; saveCostBasis(costBasis); const tpStSa = loadTpState(); if (tpStSa[p.sym]) { delete tpStSa[p.sym]; saveTpState(tpStSa); } delete holdStart[p.sym]; markTrade(); break;
         }
         else log(`  Sell skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
       }
@@ -1542,10 +1598,13 @@ async function main() {
         if (isTpPartial && BigInt(rawToSell) <= 0n) { log(`  TP fraction too small, skipping`); }
         else {
         const liq = await checkLiquidity(p.id, USDC_NEAR, rawToSell);
-        if (liq === false) { log(`  ⚠️ ${p.sym} has no sell route, skipping`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); }
+        if (liq === false) {
+          if (costBasis[p.sym]) { log(`  ⚠️ ${p.sym} sell route transient, will retry next cycle`); }
+          else { log(`  ⚠️ ${p.sym} has no sell route, skipping`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); }
+        }
         else if (liq === null) { log(`  ⚠️ ${p.sym} sell route check failed (network error), skipping`); }
         else {
-          if (!await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) { log(`  Skipped (AI rejected)`); if (reason.includes('junk')) { junkTimers[p.sym] = Date.now(); log(`  ${p.sym} junk timer reset (AI rejected)`); } } else {
+          if (!await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) { log(`  Skipped (AI rejected)`); } else {
           log(`Sell ${p.sym}→USDC...`);
           const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, rawToSell, env.pk, assets);
           tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1592,7 +1651,7 @@ async function main() {
                 log(`  ✅ Sold ${p.sym} → ${r.out} USDC (${spnl2 >= 0 ? '+' : ''}$${spnl2.toFixed(2)}, ${spnl2 >= 0 ? '+' : ''}${(spnl2 / scb2.cost * 100).toFixed(1)}%) [spread ${r.spread?.toFixed(2) || 0}%${(r.feeUsd || 0) > 0 ? `, fee $${r.feeUsd.toFixed(4)}` : ''}]`);
                 recordTrade('SELL', p.sym, sp2, spnl2, spnl2 / scb2.cost * 100, reason.split(' ').slice(1).join(' '), p.score);
               }
-              delete costBasis[p.sym]; delete junkTimers[p.sym]; delete obTimers[p.sym]; saveCostBasis(costBasis); const tpSf = loadTpState(); if (tpSf[p.sym]) { delete tpSf[p.sym]; saveTpState(tpSf); } delete holdStart[p.sym];
+              delete costBasis[p.sym]; delete obTimers[p.sym]; saveCostBasis(costBasis); const tpSf = loadTpState(); if (tpSf[p.sym]) { delete tpSf[p.sym]; saveTpState(tpSf); } delete holdStart[p.sym];
             }
           }
           if (!r?.ok) log(`  Sell skipped (spread ${r?.spread?.toFixed(1) || '?'}%)`);
@@ -1607,7 +1666,10 @@ async function main() {
         const rebalRank = rebalSorted.findIndex(x => x.sym === p.sym);
         const rebalTier = tierPct(rebalRank >= 0 ? Math.min(rebalRank, 2) : 2, nonStablePositions.length);
         const liq = await checkLiquidity(p.id, USDC_NEAR, p.raw);
-        if (liq === false) { log(`  ⚠️ ${p.sym} has no sell route, cannot rebalance`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); }
+        if (liq === false) {
+          if (costBasis[p.sym]) { log(`  ⚠️ ${p.sym} sell route transient, will retry next cycle`); }
+          else { log(`  ⚠️ ${p.sym} has no sell route, cannot rebalance`); newFailedTokens.add(p.sym); if (routePrev.has(p.sym)) logRouteChange(p.sym, 'disappeared'); }
+        }
         else if (liq === null) { log(`  ⚠️ ${p.sym} sell route check failed (network error), cannot rebalance`); }
         else {
           const heldSyms = new Set(nonStablePositions.map(x => x.sym));
@@ -1659,7 +1721,7 @@ async function main() {
               raisedSyms[p.sym] = Date.now();
               saveRaisedSyms(raisedSyms);
               delete costBasis[p.sym];
-              delete junkTimers[p.sym]; delete obTimers[p.sym];
+              delete obTimers[p.sym];
               saveCostBasis(costBasis);
               const tpStRb = loadTpState(); if (tpStRb[p.sym]) { delete tpStRb[p.sym]; saveTpState(tpStRb); }
               const target = buyEntry(buyBest.sym);
@@ -1707,7 +1769,10 @@ async function main() {
       const worstRank = worstSorted.findIndex(p => p.sym === worst.sym);
       const worstTier = tierPct(worstRank >= 0 ? Math.min(worstRank, 2) : 2, nonStablePositions.length);
       const liq = await checkLiquidity(worst.id, USDC_NEAR, worst.raw);
-      if (liq === false) { log(`  ⚠️ ${worst.sym} has no sell route, cannot rotate`); newFailedTokens.add(worst.sym); if (routePrev.has(worst.sym)) logRouteChange(worst.sym, 'disappeared'); }
+      if (liq === false) {
+        if (costBasis[worst.sym]) { log(`  ⚠️ ${worst.sym} sell route transient, will retry next cycle`); }
+        else { log(`  ⚠️ ${worst.sym} has no sell route, cannot rotate`); newFailedTokens.add(worst.sym); if (routePrev.has(worst.sym)) logRouteChange(worst.sym, 'disappeared'); }
+      }
       else if (liq === null) { log(`  ⚠️ ${worst.sym} sell route check failed (network error), cannot rotate`); }
       else {
         const heldSyms = new Set(nonStablePositions.map(p => p.sym));
@@ -1767,7 +1832,7 @@ async function main() {
             raisedSyms[worst.sym] = Date.now();
             saveRaisedSyms(raisedSyms);
             delete costBasis[worst.sym];
-            delete junkTimers[worst.sym]; delete obTimers[worst.sym];
+            delete obTimers[worst.sym];
             saveCostBasis(costBasis);
             const tpStRo = loadTpState(); if (tpStRo[worst.sym]) { delete tpStRo[worst.sym]; saveTpState(tpStRo); }
             delete holdStart[worst.sym];
@@ -1805,7 +1870,7 @@ async function main() {
               raisedSyms[worst.sym] = Date.now();
               saveRaisedSyms(raisedSyms);
               delete costBasis[worst.sym];
-              delete junkTimers[worst.sym]; delete obTimers[worst.sym];
+              delete obTimers[worst.sym];
               saveCostBasis(costBasis);
               const tpStRo = loadTpState(); if (tpStRo[worst.sym]) { delete tpStRo[worst.sym]; saveTpState(tpStRo); }
               delete holdStart[worst.sym];
@@ -1894,7 +1959,7 @@ async function main() {
               raisedSyms[sellP.sym] = Date.now();
               saveRaisedSyms(raisedSyms);
               delete costBasis[sellP.sym];
-              delete junkTimers[sellP.sym]; delete obTimers[sellP.sym];
+              delete obTimers[sellP.sym];
               saveCostBasis(costBasis);
               const tpStRa = loadTpState(); if (tpStRa[sellP.sym]) { delete tpStRa[sellP.sym]; saveTpState(tpStRa); }
               delete holdStart[sellP.sym];
@@ -1968,15 +2033,42 @@ async function main() {
         if (sellCheck !== true) { routeHealth.push({ t: sym, buy: true, sell: sellCheck === null ? null : false, note: sellCheck === null ? 'buy-check: sell route network error' : 'buy-check: no sell route' }); log(`  ⚠️ ${sym} no sell route, skipping buy`); if (sellCheck === false) { newFailedTokens.add(sym); if (routePrev.has(sym)) logRouteChange(sym, 'disappeared'); } return false; }
         routeHealth.push({ t: sym, buy: true, sell: true, note: 'buy-check: both routes ok' });
         // AI validation
-        const ruleTriggered = earlyPump(best) || pumpStart(best);
+        const ruleType = earlyPump(best) ? 'earlyPump' : pumpStart(best) ? 'pumpStart' : momentumBuyable(best, failedTokens, routeInv) ? 'momentum' : accumulationBuyable(best, failedTokens, routeInv) ? 'accumulation' : 'scoring';
         if (deepseek.hasKey()) {
+          const topCands = ranked.filter(a => routeInv.has(a.sym) && a.sym !== 'NEAR' && !STABLE_SYMS.has(a.sym)).slice(0, 5);
+          const topStr = topCands.map(a => {
+            const p = [];
+            p.push(`${a.sym}: sc=${a.sc || '?'}`);
+            if (a.r != null) p.push(`RSI=${a.r.toFixed(0)}`);
+            if (a.m != null) p.push(`MOM=${a.m >= 0 ? '+' : ''}${a.m}`);
+            if (a.v != null) p.push(`VOL=${a.v.toFixed(1)}x`);
+            if (a.vs != null) p.push(`VS=${a.vs.toFixed(1)}x`);
+            if (a.e != null) p.push(`EMA=${a.e >= 0 ? '+' : ''}${a.e}`);
+            if (a.d != null) p.push(`PD=${a.d.toFixed(1)}%`);
+            if (a.ch != null) p.push(`ch=${a.ch >= 0 ? '+' : ''}${a.ch.toFixed(1)}%`);
+            p.push(`DG=${a.dg ? 'YES' : 'NO'}`);
+            return p.join(', ');
+          }).join('\n');
           const aiMsg = [
-             { role: 'system', content: 'You are a crypto trading assistant for a momentum/scoring strategy. Validate whether buying the given token is a good idea. Our buy signals: (1) high score (sc>=7), (2) earlyPump (VOL>1.8x or VS>2x, EMA>=0, 24h>2%), (3) pumpStart (heavy VOL>2.5x or VS>2.5x, EMA=+2, deep dip), (4) strong trend (sc>=6, EMA>=+1, PD<-5% dip in uptrend), (5) momentum entry (sc>=3, VOL>1x, MOM>0, EMA>=0 - partial position at 25% capital). CRITICAL RULES: Normal entries require sc>=5. Momentum entries (sc>=3 with VOL>1x, MOM>0, EMA>=0) are allowed as partial positions. For sc>=6 tokens: volume spike (VS) and positive momentum (MOM) are NOT required — the strong daily score already confirms quality; trust the trend, especially on dips (PD negative) with EMA>=+1. For sc<6 tokens: VS>1.5x and MOM>0 are still required. divergence=YES is a STRONG CONFIRMATION (price lower low + RSI higher low over last 10 candles). divergence=NO is acceptable for sc>=6 tokens with strong EMA or momentum. AVOID: Tokens with sc<5 (unless momentum entry criteria met). Tokens with no route, failing fundamentals, or obvious scams. Reply ONLY with "YES" or "NO" followed by a brief reason.' },
-            { role: 'user', content: `F&G ${fg.v}/100 ${fg.t}. BUY ${best.sym} (sc=${best.sc}, RSI=${best.r ?? '?'}, MOM=${best.m ?? '?'}, EMA=${best.e ?? '?'}, VOL=${best.v != null ? best.v.toFixed(1) + 'x' : '?'}, VS=${best.vs != null ? best.vs.toFixed(1) + 'x' : '?'}, PD=${best.d ?? '?'}%, divergence=${best.dg ? 'YES' : 'NO'}, ${best.ch >= 0 ? '+' : ''}${best.ch?.toFixed(1) || '?'}% 24h, rule: ${ruleTriggered ? earlyPump(best) ? 'earlyPump' : 'pumpStart' : 'scoring'}). Portfolio: ${pricedPositions.filter(p => p.value > 0.01).map(p => `${p.sym}=$${p.value.toFixed(0)}`).join(', ') || 'empty'}. Recent trades: ${loadTradeHistory().slice(-10).map(t => `${t.type} ${t.sym}${t.pnl !== undefined && t.pnl !== null ? ' (' + (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(1) + ')' : ''}`).join(', ') || 'none'}.` },
+             { role: 'system', content: 'You are a crypto trading assistant for a momentum/scoring strategy. Validate whether buying the given token is a good idea. Our buy signals: (1) high score (sc>=7), (2) earlyPump (VOL>1.8x or VS>2x, EMA>=0, 24h>2%), (3) pumpStart (heavy VOL>2.5x or VS>2.5x, EMA=+2, deep dip), (4) strong trend (sc>=6, EMA>=+1, PD<-5% dip in uptrend), (5) momentum entry (sc>=4, VOL>1x, MOM>0, EMA>=0 - partial position at 25% capital). CRITICAL RULES: Standard entries require sc>=5. Momentum entries ONLY need their own criteria (sc>=4, VOL>1x, MOM>0, EMA>=0) — ignore VS and divergence checks for momentum entries, they do not apply. For sc<5 standard entries: VS>1.5x and MOM>0 required — this does NOT apply to momentum entries. divergence=YES is a strong confirmation, divergence=NO is fine for momentum entries. AVOID: Tokens with no route, failing fundamentals, or obvious scams. If NO, suggest the best alternative from TOP CANDIDATES on the LAST LINE as: MISSED OPPORTUNITY: Yes – SYMBOL. Reply "YES" or "NO" followed by a brief reason.' },
+            { role: 'user', content: `F&G ${fg.v}/100 ${fg.t}. BUY ${best.sym} (sc=${best.sc}, RSI=${best.r ?? '?'}, MOM=${best.m ?? '?'}, EMA=${best.e ?? '?'}, VOL=${best.v != null ? best.v.toFixed(1) + 'x' : '?'}, VS=${best.vs != null ? best.vs.toFixed(1) + 'x' : '?'}, PD=${best.d ?? '?'}%, divergence=${best.dg ? 'YES' : 'NO'}, ${best.ch >= 0 ? '+' : ''}${best.ch?.toFixed(1) || '?'}% 24h, rule: ${ruleType}). Portfolio: ${pricedPositions.filter(p => p.value > 0.01).map(p => `${p.sym}=$${p.value.toFixed(0)}`).join(', ') || 'empty'}. Recent trades: ${loadTradeHistory().slice(-10).map(t => `${t.type} ${t.sym}${t.pnl !== undefined && t.pnl !== null ? ' (' + (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(1) + ')' : ''}`).join(', ') || 'none'}.\nTOP CANDIDATES:\n${topStr}` },
           ];
           const aiReply = await deepseek.chat(aiMsg, { maxTokens: 100, temperature: 0.1 });
           if (!aiReply) { log(`  ⚠️ DeepSeek unreachable, skipping buy`); aiRejected.add(sym); return false; }
-          if (aiReply.startsWith('NO')) { log(`  🤖 ${aiReply}`); aiRejected.add(sym); return false; }
+          if (aiReply.startsWith('NO')) {
+            log(`  🤖 ${aiReply}`);
+            const altMatch = aiReply.match(/MISSED OPPORTUNITY:\s*Yes\s*[-–]\s*(\w+)/i);
+            if (altMatch && altMatch[1] && altMatch[1] !== sym && !aiRejected.has(altMatch[1]) && !recentlySold(altMatch[1])) {
+              const altBest = ranked.find(a => a.sym === altMatch[1]);
+              const altBuyable = altBest && (buyable(altBest, failedTokens, routeInv) || divergenceBuyable(altBest, failedTokens, routeInv) || momentumBuyable(altBest, failedTokens, routeInv) || pumpStart(altBest) || earlyPump(altBest) || accumulationBuyable(altBest, failedTokens, routeInv));
+              if (altBuyable) {
+                log(`  🎯 DeepSeek suggested ${altMatch[1]}, trying that instead`);
+                return await tryBuy(altMatch[1]);
+              }
+            }
+            aiRejected.add(sym);
+            return false;
+          }
           log(`  🤖 ${aiReply}`);
         } else {
           log(`  ⚠️ DeepSeek not configured, skipping AI buy validation`);
@@ -2168,7 +2260,6 @@ async function main() {
     failCooldown[s] = Date.now();
   }
   saveFailCooldown(failCooldown);
-  saveJunkTimers(junkTimers);
   saveObTimers(obTimers);
   const now = new Date();
   history.push({ t: now.toISOString(), total: fundTotal, deposits: totalDeposits, totalFees: accruedFees, failedTokens: [...failedTokens], pos: pricedPositions.filter(p => !frozenSyms.has(p.sym) && p.value > 0).map(p => ({ s: p.sym, q: p.human, v: p.value })) });

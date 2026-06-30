@@ -1,39 +1,9 @@
-# Evening Reflection — June 28
+# TODO
 
-## Done Today
+## DeepSeek Feedback to Act On
 
-### Candidate finder + tryBuy alignment
-- **Problem:** Candidate finder accepted `pumpStart`/`earlyPump` tokens (sc≥3), but `tryBuy` rejected them at a stricter gate — 58ms silent skip, no log.
-- **Fix (initial):** Removed `pumpStart`/`earlyPump` from candidate finder gates to match tryBuy.
-- **Reversal (final):** Reinstated both, widened tryBuy's first gate to accept them, and added `accumulationBuyable()` for VOL>2x + EMA=+1 + ch>3% + sc≥4 entries. Decision and execution now consistent.
+```
+REASONING: The agent's BUY decision on XLM is premature. While XLM shows a +4.7% gain and RSI=68 (approaching overbought), the overall market breadth is weak (only 4/8 green, avg -0.17%) and the F&G is Extreme Fear (15/100), which alone is not a buy signal without two additional confirmations. XLM's volume is only 1.1x (below the 1.5x threshold for genuine accumulation), and its PD=-14.7% indicates high risk of further downside. The EMA is neutral (+0), providing no directional support. Additionally, the existing XLM position has a -14.7% loss (not profitable), so no profit-taking is triggered, but buying more in a weak market with low volume is risky.
 
-### Silent skip logging
-- **Problem:** `tryBuy()` returned false without logging why — RHEA (sc=3, earlyPump) silently rejected in 58ms.
-- **Fix:** Broke compound gates into individual logged checks (`not buyable`, `fails quality gate`, `recently raised`, `already held`, `not in portfolio`, `insufficient USDC`, `amount too small`).
-
-### Fallback scan removed
-- **Problem:** Every cycle iterated all ranked tokens (~hundreds) with silent `continue`s.
-- **Fix:** Removed. Candidate finder already identified the best token — tryBuy either works or doesn't. No point re-scanning everything.
-
-### Pump peak sell trigger
-- **New trigger:** Positions bought via `pumpStart`/`earlyPump` (tracked via `costBasis.pumpEntry`) sold when PD ≥ -1% — peak reached, pump exhausted.
-- TURBO example: bought at PD=-50%, climbs to PD=-0.5% → immediate sell.
-
-### Accumulation entry path
-- **New function `accumulationBuyable()`:** VOL>2x + EMA=+1 + ch>3% + sc≥4, bypasses MOM/VS gates.
-- **Allocation:** 25% partial position (same as momentum entries).
-
-### Divergence display
-- `assetMetrics`: top 10 with columns aligned (`padEnd(10)`) + `DG=YES/NO` on every line.
-- `topList`: top 3 compact with `DG=YES/NO`.
-- `posStr`: portfolio positions include `DG=YES/NO` (except USDC).
-
-### DeepSeek prompts
-- Divergence already passed in BUY/SELL vetting prompts.
-- System prompt updated to explain divergence weighting.
-
-## Open Questions
-
-1. **`accumulationBuyable()` — VOL threshold?** Currently >2x. TURBO had 1.5x. Lower to 1.5x?
-2. **Pump peak sell — PD threshold?** Currently ≥ -1%. Another value?
-3. **AI advisor system prompt** — Should the accumulation entry rule be added to the buy vetting prompt?
+MISSED OPPORTUNITY: Yes - DOGE shows potential for a bounce: RSI=31 (near oversold), VOL=3.6x (high volume), MOM=+1 (positive momentum), and PD=-14.9% (deep discount). However, the DG=YES (distribution) and -2.2% daily loss suggest selling pressure, so this is a high-risk bounce play, not a clear buy.
+```
