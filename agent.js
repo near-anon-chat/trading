@@ -806,12 +806,15 @@ async function validateSell(sym, reason, position, fg, portfolio, holdStartMap) 
   const cbSym = position?.sym ? costBasisLocal[position.sym] : null;
   const pnlStr = cbSym?.cost > 0 && position?.value > 0 ? ((position.value - cbSym.cost) / cbSym.cost * 100).toFixed(1) + '%' : '?';
   const aiMsg = [
-    { role: 'system', content: 'You are a crypto trading assistant. Validate whether SELLING the given token is a good idea. Sell triggers: (1) overbought (RSI>92), (2) low score (<4) — JUNK SELL: triggered immediately when score drops below 4. Do NOT approve if the token has active price action (RSI > 70, VOL > 1.0x, or MOM > 0) — these indicate genuine recovery potential regardless of score. A score of 3 with RSI=78 and VOL=1.3x is not junk, it is a position with real trading activity. Only approve junk sell when the token is genuinely dead: low RSI (< 50), low volume (< 0.8x), and negative or flat momentum, (3) sharp drop (MOM=-2), (4) volatile drop (VOL>3x+MOM<0 or VS>3x+price drop), (5) EMA crash (EMA=-2), (6) pump peak exit: sells pump-entry positions after the peak has passed (PD <= -2% AND MOM <= 0). The token rose from a pump entry, peaked, and is now declining — momentum confirms the fade. Do NOT sell at PD=0 (still at peak with active momentum — premature), (7) emergency crash, (8) risk-off (F&G<30+broad red), (9) rotation (replace weakest), (10) raise USDC (sell to buy better), (11) rotation upgrade: selling an underperforming position (sc<4 OR (VOL<1.0x AND MOM≤0)) to fund a momentum/breakout entry (target VOL>1.5x, MOM>0, EMA≥0) is VALID even if held <2h because dead-volume opportunity cost outweighs the spread, (12) take-profit: staged TP system sells 1/3 at RSI>75 (tier1), 1/3 at RSI>82 (tier2), and all at RSI>92 (tier3). TIER1 AND TIER2 ARE MECHANICAL RISK-MANAGEMENT RULES — approve unless extraordinary circumstances (e.g., token just entered a strong breakout with VOL>2.0x and MOM>0 and price breaking out to new highs). You keep 2/3 of the position after tier1/tier2, so there is still upside exposure. Rejecting TP sells causes positions to be held until they turn junk and lose all profit — this is the main failure pattern to avoid. Low-volume overbought rallies (VOL<1.0x, MOM>0) should STILL be sold — taking partial profit on a low-volume pump is correct risk management. (13) weak overbought exit (rolling over): RSI>75 AND MOM≤0 AND VOL<1.0x — the rally is stalling on low volume, momentum is fading. Approve as a mechanical exit signal. DIVERGENCE RULE: If divergence=YES (bullish divergence), consider HOLDING longer unless other sell signals are overwhelming. If divergence=NO and price is stalling (MOM=0, RSI declining), take profit. VOL=price volatility (price swings), VS=actual trading volume spike. Avoid churn: selling recently-bought tokens early wastes spread. Reply ONLY "YES" or "NO" + brief reason.' },
+    { role: 'system', content: 'You are a crypto trading assistant. Validate whether SELLING the given token is a good idea. Sell triggers: (1) overbought (RSI>92), (2) low score (<4) — JUNK SELL: triggered immediately when score drops below 4. Do NOT approve if the token has active price action (RSI > 70, VOL > 1.0x, or MOM > 0) — these indicate genuine recovery potential regardless of score. A score of 3 with RSI=78 and VOL=1.3x is not junk, it is a position with real trading activity. Only approve junk sell when the token is genuinely dead: low RSI (< 50), low volume (< 0.8x), and negative or flat momentum, (3) sharp drop (MOM=-2), (4) volatile drop (VOL>3x+MOM<0 or VS>3x+price drop), (5) EMA crash (EMA=-2), (6) pump peak exit: sells pump-entry positions after the peak has passed (PD <= -2% AND MOM <= 0). The token rose from a pump entry, peaked, and is now declining — momentum confirms the fade. Do NOT sell at PD=0 (still at peak with active momentum — premature), (7) emergency crash, (8) risk-off (F&G<30+broad red), (9) rotation (replace weakest), (10) raise USDC (sell to buy better), (11) rotation upgrade: selling an underperforming position (sc<4 OR (VOL<1.0x AND MOM≤0)) to fund a momentum/breakout entry (target VOL>1.5x, MOM>0, EMA≥0) is VALID even if held <2h because dead-volume opportunity cost outweighs the spread, (12) take-profit: staged TP system sells 1/3 at RSI>75 (tier1), 1/3 at RSI>82 (tier2), and all at RSI>92 (tier3). TIER1 AND TIER2 ARE MECHANICAL RISK-MANAGEMENT RULES — approve unless extraordinary circumstances (e.g., token just entered a strong breakout with VOL>2.0x and MOM>0 and price breaking out to new highs). You keep 2/3 of the position after tier1/tier2, so there is still upside exposure. Rejecting TP sells causes positions to be held until they turn junk and lose all profit — this is the main failure pattern to avoid. Low-volume overbought rallies (VOL<1.0x, MOM>0) should STILL be sold — taking partial profit on a low-volume pump is correct risk management. (13) weak overbought exit (rolling over): RSI>75 AND MOM≤0 AND VOL<1.0x — the rally is stalling on low volume, momentum is fading. Approve as a mechanical exit signal. DIVERGENCE RULE: If divergence=YES (bullish divergence), consider HOLDING longer unless other sell signals are overwhelming. If divergence=NO and price is stalling (MOM=0, RSI declining), take profit. VOL=price volatility (price swings), VS=actual trading volume spike. Avoid churn: selling recently-bought tokens early wastes spread. Reply ONLY "YES" or "NO" + brief reason. When rejecting a junk sell, if you see a stronger opportunity to buy instead, output: MISSED OPPORTUNITY: Yes – SYMBOL (key metrics + reason). The agent will follow your suggestion.' },
     { role: 'user', content: `F&G ${fg?.v ?? '?'}/100 ${fg?.t ?? '?'}. SELL ${sym} (${reason}, sc=${position?.score ?? '?'}, RSI=${position?.rsi ?? '?'}, MOM=${position?.mom ?? '?'}, EMA=${position?.e ?? '?'}, VOL=${position?.vol != null ? position.vol.toFixed(1) + 'x' : '?'}, VS=${position?.vs != null ? position.vs.toFixed(1) + 'x' : '?'}, PD=${position?.d ?? '?'}%, P&L=${pnlStr}, held=${holdStr}, divergence=${position?.dg ? 'YES' : 'NO'}). Portfolio: ${(portfolio || []).filter(p => p.value > 0.01).map(p => `${p.sym}=$${p.value.toFixed(0)}`).join(', ') || 'empty'}. Recent trades: ${recentTrades || 'none'}.` },
   ];
-  const aiReply = await deepseek.chat(aiMsg, { maxTokens: 100, temperature: 0.1 });
+  const aiReply = await deepseek.chat(aiMsg, { maxTokens: 150, temperature: 0.1 });
   if (aiReply) log(`  🤖 DS: ${aiReply}`);
-  if (aiReply?.startsWith('NO')) return false;
+  if (aiReply?.startsWith('NO')) {
+    const mo = aiReply.match(/MISSED OPPORTUNITY:\s*Yes\s*[-–]\s+(\w+)/i);
+    return mo ? { suggestedSym: mo[1] } : false;
+  }
   return true;
 }
 
@@ -1228,7 +1231,7 @@ async function main() {
             const raw = BigInt(Math.floor(cb.qty * 10 ** target.dec)).toString();
             const liq = await checkLiquidity(target.id, USDC_NEAR, raw);
             if (liq) {
-              if (!await validateSell(sym, 'recovery (' + sym + ' stranded)', null, fg, [], {})) { log(`  Skipped recovery (AI rejected)`); continue; }
+              if ((await validateSell(sym, 'recovery (' + sym + ' stranded)', null, fg, [], {})) !== true) { log(`  Skipped recovery (AI rejected)`); continue; }
               const r = await execSwap(target, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, raw, env.pk, assets);
               tradedThisCycle = true;
               if (r?.ok) {
@@ -1568,7 +1571,7 @@ async function main() {
           continue;
         }
         if (liq === null) { log(`  ⚠️ ${p.sym} sell route check failed (network error), skipping`); continue; }
-        if (!await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) { log(`  Skipped (AI rejected)`); continue; }
+        if ((await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) !== true) { log(`  Skipped (AI rejected)`); continue; }
         log(`Sell ${p.sym}→USDC...`);
         const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, p.raw, env.pk, assets);
         tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1604,7 +1607,13 @@ async function main() {
         }
         else if (liq === null) { log(`  ⚠️ ${p.sym} sell route check failed (network error), skipping`); }
         else {
-          if (!await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) { log(`  Skipped (AI rejected)`); } else {
+          const vsJ = await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart);
+          if (vsJ !== true) {
+            if (typeof vsJ === 'object' && vsJ.suggestedSym) {
+              log(`  🤖 DS suggests buying ${vsJ.suggestedSym} instead`);
+              action = 'BUY'; buyTargetSym = vsJ.suggestedSym;
+            } else { log(`  Skipped (AI rejected)`); }
+          } else {
           log(`Sell ${p.sym}→USDC...`);
           const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, rawToSell, env.pk, assets);
           tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1698,7 +1707,7 @@ async function main() {
           if (!buyBest) {
             log(`  No buyable target found, rebalance skipped`);
           } else {
-            if (!await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) { log(`  Rebalance skipped (AI rejected)`); } else {
+            if ((await validateSell(p.sym, reason, p, fg, pricedPositions, holdStart)) !== true) { log(`  Rebalance skipped (AI rejected)`); } else {
             log(`Rebalance ${p.sym}→USDC...`);
             const r = await execSwap(p, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, p.raw, env.pk, assets);
             tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1809,7 +1818,7 @@ async function main() {
         }
         if (!buyBest) {
           // Fallback: no good rotation target, sell weakest to USDC
-          if (!await validateSell(worst.sym, reason, worst, fg, pricedPositions, holdStart)) { log(`  Rotate→USDC skipped (AI rejected)`); } else {
+          if ((await validateSell(worst.sym, reason, worst, fg, pricedPositions, holdStart)) !== true) { log(`  Rotate→USDC skipped (AI rejected)`); } else {
           log(`Rotate→USDC: sell ${worst.sym} (no good rotation target)...`);
           const r = await execSwap(worst, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, worst.raw, env.pk, assets);
           tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1847,7 +1856,7 @@ async function main() {
           if (!buyTarget) {
             log(`  ⚠️ ${buyBest.sym} not buyable, rotate skipped`);
           } else {
-            if (!await validateSell(worst.sym, reason, worst, fg, pricedPositions, holdStart)) { log(`  Rotate skipped (AI rejected)`); } else {
+            if ((await validateSell(worst.sym, reason, worst, fg, pricedPositions, holdStart)) !== true) { log(`  Rotate skipped (AI rejected)`); } else {
             log(`Rotate ${worst.sym}→USDC...`);
             const r = await execSwap(worst, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, worst.raw, env.pk, assets);
             tradedThisCycle = true; lastSwapFee = r.feeUsd || 0;
@@ -1936,7 +1945,7 @@ async function main() {
           const liq = await checkLiquidity(sellP.id, USDC_NEAR, rawToSell);
           if (liq === false) { log(`  ⚠️ ${sellP.sym} no sell route, cannot raise USDC`); continue; }
           else if (liq === null) { log(`  ⚠️ ${sellP.sym} sell route check failed (network error), cannot raise USDC`); continue; }
-          if (!await validateSell(sellP.sym, 'raise USDC (' + (buyTargetSym || '?') + ')', sellP, fg, pricedPositions, holdStart)) { log(`  Raise USDC skipped (AI rejected)`); continue; }
+          if ((await validateSell(sellP.sym, 'raise USDC (' + (buyTargetSym || '?') + ')', sellP, fg, pricedPositions, holdStart)) !== true) { log(`  Raise USDC skipped (AI rejected)`); continue; }
           log(`  Raise USDC: sell ${sellP.sym} ($${isFullSell ? sellP.value.toFixed(2) : shortfall.toFixed(2)})...`);
           const r = await execSwap(sellP, { id: USDC_NEAR, sym: 'USDC', dec: 6 }, rawToSell, env.pk, assets);
           tradedThisCycle = true; lastSwapFee = (lastSwapFee || 0) + (r.feeUsd || 0);
